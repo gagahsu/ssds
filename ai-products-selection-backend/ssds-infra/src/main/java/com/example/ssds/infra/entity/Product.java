@@ -1,5 +1,6 @@
 package com.example.ssds.infra.entity;
 
+import com.example.ssds.core.domain.LastScoringStatus;
 import com.example.ssds.core.domain.ProductStatus;
 import com.example.ssds.core.domain.Season;
 import com.example.ssds.core.domain.SourcingStatus;
@@ -7,6 +8,7 @@ import com.example.ssds.core.domain.TrackType;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -100,6 +102,14 @@ public class Product extends BaseAuditEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by")
     private AppUser createdBy;
+
+    /** 最近一次評分嘗試的技術結果，NULL 表尚未嘗試過評分（§5.7 落地機制）。 */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "last_scoring_status", length = 20)
+    private LastScoringStatus lastScoringStatus;
+
+    @Column(name = "last_scoring_attempted_at")
+    private Instant lastScoringAttemptedAt;
 
     /**
      * 關聯關鍵字。join table 只有兩個外鍵、無自身屬性，故用 {@code @ManyToMany}。

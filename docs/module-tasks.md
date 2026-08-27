@@ -141,7 +141,7 @@ Phase 0 契約凍結後，以下五條線互不依賴，可各開一個 git work
 **下一步要做的事，依優先序**
 
 1. ~~評分批次編排（最優先，Phase 2 關鍵路徑）~~ **已於本次（2026-08-27）完成**，見下方「Phase 2 進度」。
-2. **落實「資料不足」的 schema 變更**：commit 4 只改了規格書文字，**還沒**真的加 `product.last_scoring_status`／`last_scoring_attempted_at` 欄位（需開新 Flyway migration）、也還沒把 `risk_alert.risk_type` 的 CHECK 約束與 `RiskAlert` 相關 enum 加上 `DATA_INSUFFICIENT`。orchestrator 目前受限於這個缺口（見下方說明），建議儘快補上。
+2. ~~落實「資料不足」的 schema 變更~~ **已於本次（2026-08-27）完成**：新增 `V21__data_insufficient_scoring_status.sql`——`product` 加 `last_scoring_status`（`SCORED`/`INSUFFICIENT_DATA`，對應新 domain enum `com.example.ssds.core.domain.LastScoringStatus`）與 `last_scoring_attempted_at` 兩欄；`risk_alert.risk_type` 的 `ck_risk_alert_type` CHECK 補上 `DATA_INSUFFICIENT`（V17 的 9 個值漏掉這個 v3.0 新增值）。`ProductScoringOrchestrator` 已接上：每次評分嘗試（成功或資料不足）結束都寫 `Product.lastScoringStatus`／`lastScoringAttemptedAt`（`markScoringAttempt`）；資料不足時額外開一筆 `DATA_INSUFFICIENT` 的 `risk_alert`（`raiseDataInsufficientAlert`，用 `existsByProductIdAndRiskTypeAndStatus` 去重，比照 `PENALTY_CAP` 主動推進示警清單，§5.7、§FR-10-1）。`:ssds-api:test`（含全 context 啟動、本機 DB 跑過 Flyway V21）、`:ssds-core:test` 全綠。
 3. `LOGISTICS_RISK`／`INVENTORY_RISK` 目前是 code 常數（`LogisticsRiskCalculator`／`InventoryRiskCalculator`），應改為吃 `RiskRuleRepositoryPort` 提供的 `RiskRuleConfig.thresholds()`，不要繼續寫死——現在能過測試是因為測試直接呼叫這兩個類別，接上 orchestrator 後才會露出「SYS_ADMIN 改門檻要重新部署」的問題。
 4. 已知問題 1、2（種子密碼、`MigrationVerificationTest` 編譯失敗）仍未修，使用者先前表示資料庫與依賴先不動，維持現狀。
 5. Track 3（AI Agent）／Track 4（熱度資料層）／前端可平行推進，不受上述影響，但最終串接評分結果都要經過第 1 點的 orchestrator。

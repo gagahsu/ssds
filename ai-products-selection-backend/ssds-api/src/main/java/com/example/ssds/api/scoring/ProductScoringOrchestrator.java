@@ -1,9 +1,12 @@
 package com.example.ssds.api.scoring;
 
+import com.example.ssds.core.domain.AlertStatus;
 import com.example.ssds.core.domain.FactorCode;
+import com.example.ssds.core.domain.LastScoringStatus;
 import com.example.ssds.core.domain.LogisticsCondition;
 import com.example.ssds.core.domain.SceneType;
 import com.example.ssds.core.domain.Sentiment;
+import com.example.ssds.core.domain.Severity;
 import com.example.ssds.core.domain.TrackType;
 import com.example.ssds.core.port.AudienceMixRepositoryPort;
 import com.example.ssds.core.port.ClimateNormalRepositoryPort;
@@ -34,12 +37,14 @@ import com.example.ssds.core.scoring.TrendSlopeCalculator;
 import com.example.ssds.core.scoring.TrendSlopeResult;
 import com.example.ssds.infra.entity.Category;
 import com.example.ssds.infra.entity.Product;
+import com.example.ssds.infra.entity.RiskAlert;
 import com.example.ssds.infra.entity.SalesRecord;
 import com.example.ssds.infra.entity.TrendKeyword;
 import com.example.ssds.infra.entity.WeightVersion;
 import com.example.ssds.infra.repository.HeatCompositeDailyRepository;
 import com.example.ssds.infra.repository.ProductRepository;
 import com.example.ssds.infra.repository.ProductReviewRepository;
+import com.example.ssds.infra.repository.RiskAlertRepository;
 import com.example.ssds.infra.repository.SalesRecordRepository;
 import com.example.ssds.infra.repository.WeightVersionRepository;
 import java.math.BigDecimal;
@@ -93,6 +98,8 @@ public class ProductScoringOrchestrator {
     /** REVIEW_RISK risk_topic_share 的關鍵字比對表：Agent 2 ReviewRiskAgent（Track 3）尚未實作前的暫代方案。 */
     private static final Set<String> RISK_TOPIC_KEYWORDS = Set.of(
             "品質", "食安", "衛生", "過期", "發霉", "腐壞", "壞掉", "破損", "摔", "漏", "臭", "異物");
+    /** §5.7、§FR-10-1：資料不足時開立的示警類型。 */
+    private static final String DATA_INSUFFICIENT_RISK_TYPE = "DATA_INSUFFICIENT";
 
     private final ProductRepository productRepository;
     private final WeightVersionRepository weightVersionRepository;
@@ -106,6 +113,7 @@ public class ProductScoringOrchestrator {
     private final SalesRecordRepository salesRecordRepository;
     private final ProductReviewRepository productReviewRepository;
     private final HeatCompositeDailyRepository heatCompositeDailyRepository;
+    private final RiskAlertRepository riskAlertRepository;
 
     public ProductScoringOrchestrator(
             ProductRepository productRepository,
@@ -119,7 +127,8 @@ public class ProductScoringOrchestrator {
             ProductScoreRepositoryPort productScoreRepositoryPort,
             SalesRecordRepository salesRecordRepository,
             ProductReviewRepository productReviewRepository,
-            HeatCompositeDailyRepository heatCompositeDailyRepository) {
+            HeatCompositeDailyRepository heatCompositeDailyRepository,
+            RiskAlertRepository riskAlertRepository) {
         this.productRepository = productRepository;
         this.weightVersionRepository = weightVersionRepository;
         this.weightProfileRepositoryPort = weightProfileRepositoryPort;
@@ -132,6 +141,7 @@ public class ProductScoringOrchestrator {
         this.salesRecordRepository = salesRecordRepository;
         this.productReviewRepository = productReviewRepository;
         this.heatCompositeDailyRepository = heatCompositeDailyRepository;
+        this.riskAlertRepository = riskAlertRepository;
     }
 
     /** 一次全量重評（§5.10「每週一 07:00」等全量觸發共用此方法）。 */
@@ -174,15 +184,45 @@ public class ProductScoringOrchestrator {
 
             if (!result.sufficientData()) {
                 skippedInsufficientData++;
+                markScoringAttempt(product, LastScoringStatus.INSUFFICIENT_DATA, asOf);
+                raiseDataInsufficientAlert(product);
                 continue;
             }
 
             productScoreRepositoryPort.save(
                     product.getId(), period, scene, true, activeVersion.getId(), result, confidence, asOf);
+            markScoringAttempt(product, LastScoringStatus.SCORED, asOf);
             scored++;
         }
 
         return new BatchSummary(products.size(), scored, skippedInsufficientData);
+    }
+
+    /**
+     * 記錄本次評分嘗試的技術結果（§5.7 落地機制），每次評分嘗試（含全量與未來的
+     * 單筆評分）結束時都要寫，不論成功或資料不足。
+     */
+    private void markScoringAttempt(Product product, LastScoringStatus status, OffsetDateTime asOf) {
+        product.setLastScoringStatus(status);
+        product.setLastScoringAttemptedAt(asOf.toInstant());
+        productRepository.save(product);
+    }
+
+    /**
+     * 資料不足時比照扣分達 20（{@code PENALTY_CAP}）一樣主動推進風險示警清單
+     * （§5.7、§FR-10-1）。已有一筆未處理的同類示警時不重複開立。
+     */
+    private void raiseDataInsufficientAlert(Product product) {
+        if (riskAlertRepository.existsByProductIdAndRiskTypeAndStatus(
+                product.getId(), DATA_INSUFFICIENT_RISK_TYPE, AlertStatus.OPEN)) {
+            return;
+        }
+        riskAlertRepository.save(RiskAlert.builder()
+                .product(product)
+                .riskType(DATA_INSUFFICIENT_RISK_TYPE)
+                .severity(Severity.MEDIUM)
+                .triggerValue("六項加分因子缺 4 項以上")
+                .build());
     }
 
     // ==================== 第一段：原始值蒐集 ====================

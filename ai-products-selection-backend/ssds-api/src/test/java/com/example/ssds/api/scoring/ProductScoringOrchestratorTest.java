@@ -33,6 +33,7 @@ import com.example.ssds.infra.entity.WeightVersion;
 import com.example.ssds.infra.repository.HeatCompositeDailyRepository;
 import com.example.ssds.infra.repository.ProductRepository;
 import com.example.ssds.infra.repository.ProductReviewRepository;
+import com.example.ssds.infra.repository.RiskAlertRepository;
 import com.example.ssds.infra.repository.SalesRecordRepository;
 import com.example.ssds.infra.repository.WeightVersionRepository;
 import java.math.BigDecimal;
@@ -67,6 +68,7 @@ class ProductScoringOrchestratorTest {
     @Mock private SalesRecordRepository salesRecordRepository;
     @Mock private ProductReviewRepository productReviewRepository;
     @Mock private HeatCompositeDailyRepository heatCompositeDailyRepository;
+    @Mock private RiskAlertRepository riskAlertRepository;
 
     private final Category category = Category.builder().id(1L).name("零食").sortOrder(0).build();
     private final WeightVersion weightVersion = WeightVersion.builder().id(10L).versionNo("v1").name("test").build();
@@ -77,7 +79,8 @@ class ProductScoringOrchestratorTest {
                 productRepository, weightVersionRepository, weightProfileRepositoryPort,
                 gradeThresholdRepositoryPort, riskRuleRepositoryPort, climateNormalRepositoryPort,
                 audienceMixRepositoryPort, festivalAffinityRepositoryPort, productScoreRepositoryPort,
-                salesRecordRepository, productReviewRepository, heatCompositeDailyRepository);
+                salesRecordRepository, productReviewRepository, heatCompositeDailyRepository,
+                riskAlertRepository);
     }
 
     private Product product(long id, BigDecimal marginRate) {
