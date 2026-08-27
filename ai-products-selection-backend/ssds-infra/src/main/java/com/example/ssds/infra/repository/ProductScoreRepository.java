@@ -1,6 +1,7 @@
 package com.example.ssds.infra.repository;
 
 import com.example.ssds.core.domain.Grade;
+import com.example.ssds.core.domain.SceneType;
 import com.example.ssds.infra.entity.ProductScore;
 import java.util.List;
 import java.util.Optional;
@@ -48,4 +49,8 @@ public interface ProductScoreRepository extends JpaRepository<ProductScore, Long
     long countByPeriodAndConfidenceLessThan(String period, int confidence);
 
     boolean existsByProductIdAndPeriod(Long productId, String period);
+
+    /** §5.10：同鍵重複評分時，寫入新紀錄前需先把舊的現行列改為非現行。 */
+    List<ProductScore> findByProductIdAndPeriodAndSceneTypeAndActiveTrue(
+            Long productId, String period, SceneType sceneType);
 }

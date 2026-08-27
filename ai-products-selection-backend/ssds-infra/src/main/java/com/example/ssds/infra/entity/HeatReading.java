@@ -29,9 +29,15 @@ public class HeatReading {
     @JoinColumn(name = "source_id", nullable = false)
     private HeatSource source;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "keyword_id", nullable = false)
+    /** 關鍵字級來源；品類級來源（如 Instagram）改填 {@link #category}（§7.2、§FR-06）。 */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "keyword_id")
     private TrendKeyword keyword;
+
+    /** 品類級來源專用；DB 端 CHECK 要求 keyword 與 category 至少擇一非 null。 */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id")
+    private Category category;
 
     @Column(name = "reading_date", nullable = false)
     private LocalDate readingDate;

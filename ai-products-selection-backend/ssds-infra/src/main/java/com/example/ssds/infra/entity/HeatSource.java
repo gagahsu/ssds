@@ -2,6 +2,7 @@ package com.example.ssds.infra.entity;
 
 import com.example.ssds.core.domain.AdapterType;
 import com.example.ssds.core.domain.HeatSourceCode;
+import com.example.ssds.core.domain.HeatSourceGranularity;
 import com.example.ssds.core.domain.SourceAvailability;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
@@ -44,6 +45,12 @@ public class HeatSource {
     @Column(nullable = false, length = 16)
     @Builder.Default
     private SourceAvailability availability = SourceAvailability.AVAILABLE;
+
+    /** 品類級來源（目前僅 Instagram）於合成時套用 0.5 粒度折扣（§5.3.2）。 */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16)
+    @Builder.Default
+    private HeatSourceGranularity granularity = HeatSourceGranularity.KEYWORD;
 
     @Column(name = "quota_used", nullable = false)
     @Builder.Default

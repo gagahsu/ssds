@@ -21,4 +21,8 @@ public interface HeatReadingRepository extends JpaRepository<HeatReading, Long> 
 
     /** 某日某來源的全部讀值，供「同來源內百分位化」批次計算（§5.3.2）。 */
     List<HeatReading> findBySourceIdAndReadingDate(Long sourceId, LocalDate readingDate);
+
+    /** 某關鍵字某日、跨所有來源的讀值，供多來源合成（§5.3.2 HeatCompositeCalculator 輸入）。 */
+    @EntityGraph(attributePaths = {"source"})
+    List<HeatReading> findByKeywordIdAndReadingDate(Long keywordId, LocalDate readingDate);
 }
