@@ -105,6 +105,7 @@ class ProductScoringOrchestratorTest {
         when(gradeThresholdRepositoryPort.findThresholds(10L, SceneType.REPLENISHMENT))
                 .thenReturn(new GradeThresholdSet(SceneType.REPLENISHMENT, BigDecimal.valueOf(80), BigDecimal.valueOf(60)));
         when(productReviewRepository.countByProductId(1L)).thenReturn(5L); // < 20，樣本不足不查門檻
+        stubRiskRuleConfigs();
 
         ProductScoringOrchestrator.BatchSummary summary =
                 newOrchestrator().runFullBatch(p -> SceneType.REPLENISHMENT, asOf);
@@ -140,6 +141,7 @@ class ProductScoringOrchestratorTest {
         when(festivalAffinityRepositoryPort.findAffinities(anyLong(), anyInt())).thenReturn(List.of());
         when(climateNormalRepositoryPort.findCategoryIdealTempRange(1L)).thenReturn(Optional.empty());
         when(productReviewRepository.countByProductId(anyLong())).thenReturn(5L);
+        stubRiskRuleConfigs();
 
         newOrchestrator().runFullBatch(p -> SceneType.REPLENISHMENT, asOf);
 
@@ -162,6 +164,25 @@ class ProductScoringOrchestratorTest {
                 .map(BonusFactorContribution::normalizedValue)
                 .findFirst()
                 .orElseThrow();
+    }
+
+    /** §5.2.2 佔位點數表，供測試餵給 {@code risk_rule.threshold_json} 的 mock。 */
+    private void stubRiskRuleConfigs() {
+        when(riskRuleRepositoryPort.findConfig(eq("LOGISTICS_RISK"), anyLong())).thenReturn(
+                new RiskRuleConfig("LOGISTICS_RISK", null, Map.of(
+                        "meltable_summer_points", BigDecimal.valueOf(4),
+                        "cold_chain_points", BigDecimal.valueOf(4),
+                        "fragile_points", BigDecimal.valueOf(3),
+                        "oversized_points", BigDecimal.valueOf(3)),
+                        BigDecimal.TEN));
+        when(riskRuleRepositoryPort.findConfig(eq("INVENTORY_RISK"), anyLong())).thenReturn(
+                new RiskRuleConfig("INVENTORY_RISK", null, Map.of(
+                        "short_shelf_life_days", BigDecimal.valueOf(60),
+                        "short_shelf_life_points", BigDecimal.valueOf(4),
+                        "seasonal_points", BigDecimal.valueOf(3),
+                        "high_moq", BigDecimal.valueOf(300),
+                        "high_moq_points", BigDecimal.valueOf(3)),
+                        BigDecimal.TEN));
     }
 
     private Map<FactorCode, BigDecimal> evenWeights() {

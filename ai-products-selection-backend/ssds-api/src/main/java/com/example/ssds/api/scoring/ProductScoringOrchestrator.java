@@ -552,17 +552,28 @@ public class ProductScoringOrchestrator {
     private BigDecimal reviewRiskThreshold(Long categoryId) {
         Map<String, BigDecimal> thresholds =
                 riskRuleRepositoryPort.findConfig("REVIEW_RISK", categoryId).thresholds();
-        BigDecimal threshold = thresholds.get("negative_rate_threshold");
-        if (threshold == null) {
-            throw new IllegalStateException(
-                    "risk_rule(REVIEW_RISK) 的 threshold_json 缺少 negative_rate_threshold");
-        }
-        return threshold;
+        return requireThreshold(thresholds, "REVIEW_RISK", "negative_rate_threshold");
     }
 
     private PenaltyContribution logisticsRisk(Product product, LocalDate evalDate) {
         Set<LogisticsCondition> conditions = parseLogisticsConditions(product.getLogisticsCondition());
-        return LogisticsRiskCalculator.calculate(conditions, evalDate.getMonth());
+        return LogisticsRiskCalculator.calculate(conditions, evalDate.getMonth(), logisticsPoints(product));
+    }
+
+    /**
+     * {@code risk_rule.threshold_json}（`rule_code = 'LOGISTICS_RISK'`）的 key 名稱
+     * （{@code meltable_summer_points} 等）為本次新定義，同 {@link #reviewRiskThreshold}
+     * 尚無對應 seed，SYS_ADMIN 需補上，否則丟例外。
+     */
+    private LogisticsRiskCalculator.Points logisticsPoints(Product product) {
+        Map<String, BigDecimal> thresholds = riskRuleRepositoryPort
+                .findConfig("LOGISTICS_RISK", product.getCategory().getId())
+                .thresholds();
+        return new LogisticsRiskCalculator.Points(
+                requireThreshold(thresholds, "LOGISTICS_RISK", "meltable_summer_points"),
+                requireThreshold(thresholds, "LOGISTICS_RISK", "cold_chain_points"),
+                requireThreshold(thresholds, "LOGISTICS_RISK", "fragile_points"),
+                requireThreshold(thresholds, "LOGISTICS_RISK", "oversized_points"));
     }
 
     private Set<LogisticsCondition> parseLogisticsConditions(String csv) {
@@ -577,7 +588,34 @@ public class ProductScoringOrchestrator {
     }
 
     private PenaltyContribution inventoryRisk(Product product) {
-        return InventoryRiskCalculator.calculate(product.getShelfLifeDays(), product.getSeason(), product.getMoq());
+        return InventoryRiskCalculator.calculate(
+                product.getShelfLifeDays(), product.getSeason(), product.getMoq(), inventoryThresholds(product));
+    }
+
+    /**
+     * {@code risk_rule.threshold_json}（`rule_code = 'INVENTORY_RISK'`）的 key 名稱
+     * （{@code short_shelf_life_days} 等）為本次新定義，同 {@link #reviewRiskThreshold}
+     * 尚無對應 seed，SYS_ADMIN 需補上，否則丟例外。
+     */
+    private InventoryRiskCalculator.Thresholds inventoryThresholds(Product product) {
+        Map<String, BigDecimal> thresholds = riskRuleRepositoryPort
+                .findConfig("INVENTORY_RISK", product.getCategory().getId())
+                .thresholds();
+        return new InventoryRiskCalculator.Thresholds(
+                requireThreshold(thresholds, "INVENTORY_RISK", "short_shelf_life_days").intValueExact(),
+                requireThreshold(thresholds, "INVENTORY_RISK", "short_shelf_life_points"),
+                requireThreshold(thresholds, "INVENTORY_RISK", "seasonal_points"),
+                requireThreshold(thresholds, "INVENTORY_RISK", "high_moq").intValueExact(),
+                requireThreshold(thresholds, "INVENTORY_RISK", "high_moq_points"));
+    }
+
+    private BigDecimal requireThreshold(Map<String, BigDecimal> thresholds, String ruleCode, String key) {
+        BigDecimal value = thresholds.get(key);
+        if (value == null) {
+            throw new IllegalStateException(
+                    "risk_rule(" + ruleCode + ") 的 threshold_json 缺少 " + key);
+        }
+        return value;
     }
 
     /** ISO 週字串（如 2026W30），以 Asia/Taipei 判定週界（§7.2.6）。 */

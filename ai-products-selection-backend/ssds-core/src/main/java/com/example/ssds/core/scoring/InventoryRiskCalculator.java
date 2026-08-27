@@ -7,35 +7,42 @@ import java.math.BigDecimal;
 /**
  * `INVENTORY_RISK` 扣分（規格書 §5.2.2：效期短、季節性強、最小訂購量偏高，上限 10）。
  *
- * <p><b>門檻為 v3.0 佔位值</b>，理由同 {@link LogisticsRiskCalculator}——規格書只給出上限與
- * 黃金案例的單一結果（效期 180 天、MOQ 200、季節 ALL → 皆未觸發），未定義確切門檻。
- * 以下門檻經 golden case 驗算，實際值待 SYS_ADMIN 校準覆寫。
+ * <p>觸發門檻與扣分點數由呼叫端經 {@code RiskRuleRepositoryPort} 從
+ * {@code risk_rule.threshold_json} 取得（見 {@link Thresholds}），不寫死在本類別——
+ * 理由同 {@link LogisticsRiskCalculator}。
  */
 public final class InventoryRiskCalculator {
-
-    private static final int SHORT_SHELF_LIFE_DAYS = 60;
-    private static final int HIGH_MOQ = 300;
-    private static final BigDecimal SHORT_SHELF_LIFE_POINTS = BigDecimal.valueOf(4);
-    private static final BigDecimal SEASONAL_POINTS = BigDecimal.valueOf(3);
-    private static final BigDecimal HIGH_MOQ_POINTS = BigDecimal.valueOf(3);
 
     private InventoryRiskCalculator() {
     }
 
-    public static PenaltyContribution calculate(Integer shelfLifeDays, Season season, Integer moq) {
+    /**
+     * 對應 {@code risk_rule.threshold_json}（`rule_code = 'INVENTORY_RISK'`）的 key：
+     * {@code short_shelf_life_days}／{@code short_shelf_life_points}／
+     * {@code seasonal_points}／{@code high_moq}／{@code high_moq_points}
+     * （§5.2.2 初始經驗值，待客戶確認，附錄 A 第 18 項）。
+     */
+    public record Thresholds(
+            int shortShelfLifeDays, BigDecimal shortShelfLifePoints,
+            BigDecimal seasonalPoints,
+            int highMoq, BigDecimal highMoqPoints) {
+    }
+
+    public static PenaltyContribution calculate(
+            Integer shelfLifeDays, Season season, Integer moq, Thresholds thresholds) {
         BigDecimal total = BigDecimal.ZERO;
         StringBuilder note = new StringBuilder();
 
-        if (shelfLifeDays != null && shelfLifeDays < SHORT_SHELF_LIFE_DAYS) {
-            total = total.add(SHORT_SHELF_LIFE_POINTS);
+        if (shelfLifeDays != null && shelfLifeDays < thresholds.shortShelfLifeDays()) {
+            total = total.add(thresholds.shortShelfLifePoints());
             note.append("效期短");
         }
         if (season != Season.ALL) {
-            total = total.add(SEASONAL_POINTS);
+            total = total.add(thresholds.seasonalPoints());
             appendNote(note, "季節性強");
         }
-        if (moq != null && moq > HIGH_MOQ) {
-            total = total.add(HIGH_MOQ_POINTS);
+        if (moq != null && moq > thresholds.highMoq()) {
+            total = total.add(thresholds.highMoqPoints());
             appendNote(note, "MOQ 偏高");
         }
 
