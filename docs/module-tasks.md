@@ -129,6 +129,23 @@ Phase 0 契約凍結後，以下五條線互不依賴，可各開一個 git work
 - `.env` 已切換為本機連線，`SPRING_PROFILES_ACTIVE=local`（**不可用預設的 `dev`**——`dev` 會多套 `db/dev` 的種子 migration V900+，跟已還原的真實資料主鍵衝突，此為實測結果非推測）。
 - 遠端連線設定備份於 `ai-products-selection-backend/.scratch/env.remote.backup`（已 gitignore），要切回遠端時複製覆蓋 `.env` 即可。
 
+## Session 結束註記（2026-08-27）
+
+**本次 session 完成的事，已全部 commit（4 個 commit，`master` 分支）**
+
+1. `25cb139` — `ssds-core/scoring` 評分引擎：§5 全部公式（加權、分級、信心度、正規化、熱度斜率/合成、節慶時間窗、氣候適配、價格帶適配、三個扣分規則）+ 8 支 port 介面。40 測試全綠，含 §11.1 黃金案例。
+2. `ea5bf4d` — `ssds-infra`：8 支 port **全部**實作、補 6 張表的 Entity/Repository、修 3 個既有 Entity 的欄位缺口（`ScoreFactor.note`、`HeatReading.category`、`HeatSource.granularity`）。
+3. `07915a6` — 本機 Docker Postgres 開發環境（`docker-compose.yml`），資料為遠端 pg_dump 一次性鏡像，`.env` 已切換。
+4. `ef2764f` — 規格書 `開發規格書_v3.0.md` 補三處缺口（§5.2.2 `LOGISTICS_RISK`/`INVENTORY_RISK` 公式、§5.7/§7.2 資料不足落地機制、§5.10 全量重評批次順序），並同步修正 `畫面功能示意圖_v3.0.html` 的 risk_type 計數（9→10）。
+
+**下一步要做的事，依優先序**
+
+1. **評分批次編排（最優先，Phase 2 關鍵路徑）**：目前有計算器（Track 1）、有資料存取（Track 2），但沒有東西把兩者串起來變成一次真正的評分。需要一個 orchestrator（放 `ssds-api` 或新 service 層）：對一批品項先寫入全部因子原始值 → 統一做同品類正規化 → 呼叫 `ScoringEngine`/`ConfidenceCalculator` → 透過 `ProductScoreRepositoryPort` 寫入。並接上 §5.10 的觸發時機表（排程／API 觸發點）。
+2. **落實「資料不足」的 schema 變更**：commit 4 只改了規格書文字，**還沒**真的加 `product.last_scoring_status`／`last_scoring_attempted_at` 欄位（需開新 Flyway migration）、也還沒把 `risk_alert.risk_type` 的 CHECK 約束與 `RiskAlert` 相關 enum 加上 `DATA_INSUFFICIENT`。等 orchestrator 開始寫的時候會立刻用到，建議跟 orchestrator 一起做。
+3. `LOGISTICS_RISK`／`INVENTORY_RISK` 目前是 code 常數（`LogisticsRiskCalculator`／`InventoryRiskCalculator`），應改為吃 `RiskRuleRepositoryPort` 提供的 `RiskRuleConfig.thresholds()`，不要繼續寫死——現在能過測試是因為測試直接呼叫這兩個類別，接上 orchestrator 後才會露出「SYS_ADMIN 改門檻要重新部署」的問題。
+4. 已知問題 1、2（種子密碼、`MigrationVerificationTest` 編譯失敗）仍未修，使用者先前表示資料庫與依賴先不動，維持現狀。
+5. Track 3（AI Agent）／Track 4（熱度資料層）／前端可平行推進，不受上述影響，但最終串接評分結果都要經過第 1 點的 orchestrator。
+
 ## 平行開發注意事項
 
 1. Phase 0 的 DB schema / port 介面 / OpenAPI 契約沒定案前，別開 Phase 1 的 worktree — 各 track 對介面理解會分歧，事後合併對不上。
