@@ -1,5 +1,6 @@
 package com.example.ssds.infra.repository;
 
+import com.example.ssds.core.domain.Sentiment;
 import com.example.ssds.infra.entity.ProductReview;
 import java.util.List;
 import org.springframework.data.domain.Page;
@@ -25,4 +26,17 @@ public interface ProductReviewRepository extends JpaRepository<ProductReview, Lo
     List<ProductReview> findUnanalyzedByProduct(@Param("productId") Long productId);
 
     long countByProductId(Long productId);
+
+    /** REVIEW_RISK 扣分（§5.2.2）的負評則數：僅計已分析且情感為負面者。 */
+    long countByProductIdAndAnalysisSentiment(Long productId, Sentiment sentiment);
+
+    /**
+     * 負評的關鍵詞，供 {@code risk_topic_share}（品質／食安／物流破損佔比，§5.2.2）判定。
+     * Agent 2 ReviewRiskAgent（Track 3，尚未實作）本應直接輸出風險主題分類；在那之前
+     * 由呼叫端對 {@code key_phrase} 做關鍵字比對，是暫時性的替代方案。
+     */
+    @Query("select r.analysis.keyPhrase from ProductReview r "
+            + "where r.product.id = :productId and r.analysis.sentiment = :sentiment")
+    List<String> findKeyPhrasesByProductIdAndAnalysisSentiment(
+            @Param("productId") Long productId, @Param("sentiment") Sentiment sentiment);
 }

@@ -140,11 +140,32 @@ Phase 0 契約凍結後，以下五條線互不依賴，可各開一個 git work
 
 **下一步要做的事，依優先序**
 
-1. **評分批次編排（最優先，Phase 2 關鍵路徑）**：目前有計算器（Track 1）、有資料存取（Track 2），但沒有東西把兩者串起來變成一次真正的評分。需要一個 orchestrator（放 `ssds-api` 或新 service 層）：對一批品項先寫入全部因子原始值 → 統一做同品類正規化 → 呼叫 `ScoringEngine`/`ConfidenceCalculator` → 透過 `ProductScoreRepositoryPort` 寫入。並接上 §5.10 的觸發時機表（排程／API 觸發點）。
-2. **落實「資料不足」的 schema 變更**：commit 4 只改了規格書文字，**還沒**真的加 `product.last_scoring_status`／`last_scoring_attempted_at` 欄位（需開新 Flyway migration）、也還沒把 `risk_alert.risk_type` 的 CHECK 約束與 `RiskAlert` 相關 enum 加上 `DATA_INSUFFICIENT`。等 orchestrator 開始寫的時候會立刻用到，建議跟 orchestrator 一起做。
+1. ~~評分批次編排（最優先，Phase 2 關鍵路徑）~~ **已於本次（2026-08-27）完成**，見下方「Phase 2 進度」。
+2. **落實「資料不足」的 schema 變更**：commit 4 只改了規格書文字，**還沒**真的加 `product.last_scoring_status`／`last_scoring_attempted_at` 欄位（需開新 Flyway migration）、也還沒把 `risk_alert.risk_type` 的 CHECK 約束與 `RiskAlert` 相關 enum 加上 `DATA_INSUFFICIENT`。orchestrator 目前受限於這個缺口（見下方說明），建議儘快補上。
 3. `LOGISTICS_RISK`／`INVENTORY_RISK` 目前是 code 常數（`LogisticsRiskCalculator`／`InventoryRiskCalculator`），應改為吃 `RiskRuleRepositoryPort` 提供的 `RiskRuleConfig.thresholds()`，不要繼續寫死——現在能過測試是因為測試直接呼叫這兩個類別，接上 orchestrator 後才會露出「SYS_ADMIN 改門檻要重新部署」的問題。
 4. 已知問題 1、2（種子密碼、`MigrationVerificationTest` 編譯失敗）仍未修，使用者先前表示資料庫與依賴先不動，維持現狀。
 5. Track 3（AI Agent）／Track 4（熱度資料層）／前端可平行推進，不受上述影響，但最終串接評分結果都要經過第 1 點的 orchestrator。
+
+## Phase 2 進度（2026-08-27）：評分批次編排（`ProductScoringOrchestrator`）
+
+新增 `com.example.ssds.api.scoring.ProductScoringOrchestrator`（`ssds-api/src/main/java/.../api/scoring/`），第一次把 Track 1 的計算器與 Track 2 的 8 支 port 串成一次真正的評分。`runFullBatch(SceneResolver, OffsetDateTime)` 是唯一入口，尚未接上排程／API 觸發點（§5.10 的觸發時機表本次未做，留給下一步）。
+
+- **情境判定**：新增 `SceneResolver`（`api/scoring/SceneResolver.java`）函式介面，`SceneType resolve(Product)`。Agent 1 SceneClassifierAgent（Track 3）尚未實作，本次刻意不放任何假 LLM 呼叫或寫死規則——呼叫端目前得自行提供情境（如全部丟 `REPLENISHMENT`），Track 3 完工後換一個真的實作即可，orchestrator 不必改。
+- **§5.10 兩段式順序**：因為 `product_score.grade` 目前是 DB NOT NULL（見上方「下一步」第 2 點），批次內任何品項在算完六項因子前都無法先寫一筆「未完成」的 `product_score`／`score_factor`，因此 `CategoryPercentilePopulationPort`（讀 DB 現有 `score_factor.raw_value`）在全量批次的當下用不上——它仍是對的介面，但只適用於「母體已由前一批寫好」的情境（如單筆評分）。本次改為批次全部品項的原始值先留在記憶體（`computeRawFactors` → `buildPopulation`），母體到齊後才對每個品項正規化並一次寫入（`ProductScoreRepositoryPort#save`）。等 schema 缺口補上後，可以改成真的分兩次交易寫 DB，屆時全量批次也能直接用 `CategoryPercentilePopulationPort`。
+- **六項加分因子的原始值來源**：
+  - `MARGIN`：直接讀 `Product.marginRate`（已由既有的 `recalculateMarginRate()` 維護）。
+  - `CVR`：**2026-08-27 修正**——規格書 §5.2.3 其實已完整定義此因子（Σqty/Σimpression + 四段退路），先前誤植為「規格未定義、暫採 90 天窗口」，屬審視 code 對照規格時發現的實作錯誤，非規格缺口。已改為 `SalesRecordRepository#findOwnConversionRate`（本品項自身、不限時間窗）→ 無自身紀錄時查 `findConversionRatiosByCategoryId` 取同品類 ≥10 筆的中位數（`imputed=true`）→ 有自身紀錄但曝光數全缺時以自身紀錄涵蓋日期範圍為「同期」，用 `sumQtyByProductInCategoryAndDateRange` 算 `qty / 品類同期平均qty` 相對指標 → 同品類 < 10 筆則無資料，四段全依 §5.2.3 原文順序。同時發現 `imputed=true` 的因子先前完全沒有觸發 `ConfidencePenaltyReason.PER_IMPUTED_FACTOR`（§5.9 信心度扣分漏了這一項，`normalizeBonusFactors` 已補上），這是連帶修正、非 CVR 專屬。
+  - `PRICE_FIT`：`AudienceMixRepositoryPort` + `Product.suggestedPrice`，客群價格帶未設定或售價未填則無資料。
+  - `FESTIVAL`：`FestivalAffinityRepositoryPort`，品項未關聯節慶或品類前置天數未設定則無資料。
+  - `CLIMATE`：`ClimateNormalRepositoryPort`，地區碼**固定寫死 `"TW_TPE"`**（2026-08-27 由 `"TW"` 修正——附錄 B `CLIMATE_REGION_DEFAULT` 與 §7.2 `region_code` 皆為 `TW_TPE`，先前寫死的值本身就不合規格，非待確認項）——`product`／`category` 目前都沒有地區欄位，先以此預設值為準（§FR-17-2 待補區域化）。
+  - `TREND`：直接用 `HeatCompositeDailyRepository`（略過 `HeatCompositeRepositoryPort`，因為該 port 只查單日單一 keyword，斜率需要一段區間；`ssds-api` 依模組圖本就可以直接依賴 `ssds-infra`）。品項可能綁多個關鍵字，逐日取各關鍵字合成熱度的平均值再算斜率；不滿 7 日歷史整個因子標無資料，不滿 30 日則以現有最長區間計算並標記 `SHORT_HEAT_HISTORY`。
+- **三個扣分規則**：`LOGISTICS_RISK`／`INVENTORY_RISK` 沿用既有計算器內建的佔位點數（未接 `RiskRuleRepositoryPort`，符合下方已知問題 3 的既定安排，非本次遺漏）。`REVIEW_RISK` 已接 `RiskRuleRepositoryPort.findConfig("REVIEW_RISK", categoryId)`，門檻 key 名稱 **`negative_rate_threshold` 為本次新定義**，資料庫（含 migration）目前查不到任何 `risk_rule` 種子資料，SYS_ADMIN 需補上這筆設定，否則跑批次會直接丟例外（找不到規則）。`risk_topic_share`（負評中屬品質／食安／物流破損的比例）本應由 Agent 2 ReviewRiskAgent（Track 3）分類，Track 3 未實作前改用關鍵字比對 `review_analysis.key_phrase`（`ProductScoringOrchestrator.RISK_TOPIC_KEYWORDS`），屬暫代方案。
+- **`ProductReviewRepository` 新增兩支查詢方法**（無 schema 變更）：`countByProductIdAndAnalysisSentiment`、`findKeyPhrasesByProductIdAndAnalysisSentiment`，供上述 `REVIEW_RISK` 使用。
+- **`ssds-api/build.gradle` 補了 `testImplementation libs.test.spring.boot`**：webmvc/security/validation 三支 test starter 不保證帶 Mockito，`ssds-core` 也是靠這支測試依賴。
+- 測試：`ssds-api/src/test/java/.../api/scoring/ProductScoringOrchestratorTest.java`，兩案例：①六項因子皆無資料時 `skippedInsufficientData` 計數正確且 `ProductScoreRepositoryPort#save` 不被呼叫（§5.7）；②兩品項同品類、`MARGIN` 原始值不同（0.10／0.30）時，正規化後的百分位為 25.00／75.00——直接證明母體是整批合併而非逐品項各自為政（§5.10 兩段式順序的核心正確性）。未做端到端比對 §11.1 黃金案例：orchestrator 走的是全新的資料來源鏈（review/sales/audience/festival/climate/heat 六條），要湊出黃金案例的精確輸入需要的 mock 設置量遠超單元測試的效益，且黃金案例本身已在 `ScoringEngineGoldenCaseTest`（`ssds-core`）覆蓋了計算邏輯本身。`./gradlew :ssds-api:test :ssds-core:test` 全綠（含既有 `SsdsApplicationTests` 全 context 啟動測試）。
+- **未做，留給下一步**：①§5.10 觸發時機表（排程 cron、API 手動觸發、資料匯入完成後重算等）完全沒接，目前只有 `runFullBatch` 這個方法可以被呼叫；②單筆評分（品項新增/編輯、人工覆寫情境）尚未實作，理論上應該直接用 `CategoryPercentilePopulationPort` 查既有母體，不必像全量批次一樣在記憶體組母體；③`REVIEW_RISK` 的 `negative_rate_threshold` key 名稱、`risk_topic_share` 關鍵字表，這兩項仍是本次為了讓 orchestrator 能跑而做的假設（`CVR`／`CLIMATE` 已於 2026-08-27 對照規格書修正，不再是假設），建議跟 SYS_ADMIN 確認後視需要調整。
+
+**2026-08-27 事後審視修正**：對照 開發規格書_v3.0.md 重新檢查上述實作，發現 `CVR`（§5.2.3）與 `CLIMATE` 地區碼（§7.2／附錄 B）兩處不是規格未定義，而是實作當下沒查全規格、憑空做了假設——規格其實已經寫死答案。已改為照規格實作（見上方 `CVR`／`CLIMATE` 條目），並補上連帶發現的 `PER_IMPUTED_FACTOR` 信心度扣分缺口。`SalesRecordRepository` 移除舊的 `findConversionRate`（時間窗版），新增 `findOwnConversionRate`／`findConversionRatiosByCategoryId`／`sumQtyByProductInCategoryAndDateRange` 三支查詢。`ProductScoringOrchestratorTest` 同步更新 mock。`./gradlew :ssds-api:test :ssds-core:test` 全綠。
 
 ## 平行開發注意事項
 
