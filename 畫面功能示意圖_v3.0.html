@@ -306,7 +306,7 @@ td.name{font-weight:500}
       <tr><td class="rank" style="width:auto">S-14</td><td class="name">系統設定</td><td><span class="chg mod">修正</span></td><td>模型設定改為<b>邏輯別名 → 免費模型 ID</b>；費用控管改以<b>每日請求數配額</b>為主，USD 預算降為次要；<b>稽核紀錄移出本模組</b>（見 S-21）</td></tr>
       <tr><td class="rank" style="width:auto">S-19</td><td class="name">權重校準審核</td><td><span class="chg mod">修正</span></td><td>因子預測力表補上<b>價格帶適配</b>一列，與六因子對齊</td></tr>
       <tr><td class="rank" style="width:auto">S-21</td><td class="name">稽核紀錄</td><td><span class="chg new">新增</span></td><td>自系統設定拆出為獨立模組（FR-18），供 BUYER_LEAD 與 SYS_ADMIN 存取，解決「BUYER_LEAD 可看 vs 僅 SYS_ADMIN 可進 /admin」的權限矛盾</td></tr>
-      <tr><td class="rank" style="width:auto">S-11</td><td class="name">風險示警中心</td><td><span class="chg mod">修正</span></td><td>風險類型改用規格書 §FR-10-1 補齊的 9 種正式 <code>risk_type</code>（原稿為未定義觸發式的自由字串，且含一個規格書並未定義的「AI 補充」機制）</td></tr>
+      <tr><td class="rank" style="width:auto">S-11</td><td class="name">風險示警中心</td><td><span class="chg mod">修正</span></td><td>風險類型改用規格書 §FR-10-1 補齊的 10 種正式 <code>risk_type</code>（原稿為未定義觸發式的自由字串，且含一個規格書並未定義的「AI 補充」機制；<code>DATA_INSUFFICIENT</code> 為實作階段發現落地機制缺口後新補）</td></tr>
       <tr><td class="rank" style="width:auto">S-13</td><td class="name">報表中心</td><td><span class="chg mod">修正</span></td><td>五份報表清單改為規格書 §FR-12 定義的品項評分明細／尋源優先序／權重校準紀錄等（原稿為品項分析明細／風險彙總／原始資料匯出，多份對不上規格書）；補上 AC-12-4、AC-12-5</td></tr>
       <tr><td class="rank" style="width:auto">S-15</td><td class="name">人工熱度標記</td><td><span class="chg new">新增</span></td><td>修正熱度等級錨點文字錯誤（誤標 3＝零星討論，規格書定義 1 與 5 才是錨點）；補上多標記者信心度遺漏的「2 人＝0.8」層級（§C-07）</td></tr>
       <tr><td class="rank" style="width:auto">S-17</td><td class="name">尋源探索（B 軌）</td><td><span class="chg new">新增</span></td><td>修正時效落差邊界值 bug：範例 gap=14 天原標「可行」，規格書 v3.0 明確將 <code>0 ≤ gap ≤ 14</code> 定為「高風險／需加速」（此邊界正是 v3.0 要解決的模糊地帶）；補上 MCP 工具白名單說明</td></tr>
@@ -1615,7 +1615,7 @@ td.name{font-weight:500}
 <!-- ══════════ S-11 風險示警中心 ══════════ -->
 <section class="screen" id="s11">
   <div class="screen-head"><span class="sid">S-11</span><h2>風險示警中心</h2><span class="fr">FR-10</span><span class="chg mod">修正</span></div>
-  <p class="screen-desc">對應簡報「AI 趨勢與風險示警」。規則型判定由系統直接算，不交給 LLM，確保門檻明確可稽核。v3.0 對齊《開發規格書》：原稿的風險類型（負評率過高／毛利偏低／樣本不足／價格離群／客群不符，含一個「AI 補充」的物流風險）並非規格書定義的列舉值。v3.0 改用規格書 §FR-10-1 補齊的 9 種 <code>risk_type</code>，全數為規則觸發，不存在 AI 補充機制。</p>
+  <p class="screen-desc">對應簡報「AI 趨勢與風險示警」。規則型判定由系統直接算，不交給 LLM，確保門檻明確可稽核。v3.0 對齊《開發規格書》：原稿的風險類型（負評率過高／毛利偏低／樣本不足／價格離群／客群不符，含一個「AI 補充」的物流風險）並非規格書定義的列舉值。v3.0 改用規格書 §FR-10-1 補齊的 10 種 <code>risk_type</code>，全數為規則觸發，不存在 AI 補充機制。</p>
   <div class="screen-body">
     <div class="frame">
       <div class="frame-bar"><i></i><i></i><i></i><span>莊敬 選品決策系統 · risks</span></div>
@@ -1711,13 +1711,13 @@ td.name{font-weight:500}
       <h4>畫面重點</h4>
       <ol>
         <li><b>觸發值要寫出來</b>不只說「有風險」，而是「負面 34% 大於門檻 20%」，採購才判斷得出要不要理它。</li>
-        <li><b>九種示警全為規則型判定</b>不交給 LLM，門檻明確可稽核（v3.0 補齊，取代 v2.0 未定義觸發式的「AI 補充」機制，見下方風險類型表）。</li>
+        <li><b>十種示警全為規則型判定</b>不交給 LLM，門檻明確可稽核（v3.0 補齊，取代 v2.0 未定義觸發式的「AI 補充」機制，見下方風險類型表）。</li>
         <li><b>同品項可疊多筆示警</b>如手工黑糖薑茶磚同時觸發季節不匹配與扣分壓級，各自獨立處理。</li>
         <li><b>忽略要留理由</b>忽略後不再出現在預設清單，但可篩選查看，且進稽核紀錄。</li>
       </ol>
       <div class="div"></div>
-      <h4>風險類型（v3.0 補齊，共 9 種）</h4>
-      <p style="font-size:11px;color:var(--ink-3);line-height:1.9">REVIEW_RISK 評論風險　·　LOGISTICS_RISK 物流風險　·　INVENTORY_RISK 庫存風險<br>PENALTY_CAP 扣分壓級　·　HEAT_CRASH 熱度急墜　·　HEAT_SURGE 熱度異常竄升<br>SEASON_MISMATCH 季節不匹配　·　FESTIVAL_WINDOW_CLOSING 檔期窗即將關閉　·　LOW_CONFIDENCE 低信心分數<br><span style="color:var(--b)">「供應商異常」移出本階段範圍（無資料源可判定），非本清單項目</span></p>
+      <h4>風險類型（v3.0 補齊，共 10 種）</h4>
+      <p style="font-size:11px;color:var(--ink-3);line-height:1.9">REVIEW_RISK 評論風險　·　LOGISTICS_RISK 物流風險　·　INVENTORY_RISK 庫存風險<br>PENALTY_CAP 扣分壓級　·　HEAT_CRASH 熱度急墜　·　HEAT_SURGE 熱度異常竄升<br>SEASON_MISMATCH 季節不匹配　·　FESTIVAL_WINDOW_CLOSING 檔期窗即將關閉　·　LOW_CONFIDENCE 低信心分數<br>DATA_INSUFFICIENT 資料不足無法評分<span class="mini">（實作階段新補，§5.7）</span><br><span style="color:var(--b)">「供應商異常」移出本階段範圍（無資料源可判定），非本清單項目</span></p>
       <div class="div"></div>
       <h4>門檻變更的生效方式</h4>
       <p style="font-size:11px;color:var(--ink-3)">SYS_ADMIN 調整門檻後立即觸發背景全量扣分重算，重算期間畫面顯示上一版分數並標示「重算中」，完成後自動更新並重跑風險規則，不消耗 LLM 配額。</p>
