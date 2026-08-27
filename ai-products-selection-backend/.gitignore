@@ -1,0 +1,49 @@
+HELP.md
+.gradle
+build/
+
+### 代理工作區 ###
+# 進度檔與草稿只給下一個 session 接手用，不進版控
+.scratch
+
+### 機密設定 ###
+# 真正的密碼只留在本機，範本 .env.example 才進版控
+.env
+.env.local
+!.env.example
+application-local.properties
+
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### VS Code ###
+.vscode/

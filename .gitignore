@@ -1,0 +1,17 @@
+# backend (gradle)
+ai-products-selection-backend/.gradle/
+ai-products-selection-backend/**/build/
+ai-products-selection-backend/hs_err_pid*.log
+ai-products-selection-backend/*.hprof
+
+# frontend (angular/node)
+ai-products-selection-frontend/node_modules/
+ai-products-selection-frontend/dist/
+ai-products-selection-frontend/.angular/
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
