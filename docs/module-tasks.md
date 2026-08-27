@@ -99,12 +99,35 @@ Phase 0 契約凍結後，以下五條線互不依賴，可各開一個 git work
 **已完成**
 - Phase 0：DB schema（Flyway V1~V20，對齊 §7.2）、前端路由骨架。
 - FR-01 登入與權限（後端）：`AuthService`／`JwtTokenProvider`／`SecurityConfig` 等，見 `ai-products-selection-backend/ssds-api/src/main/java/com/example/ssds/api/security/`。`/auth/login`、`/auth/refresh`、`/auth/logout`、`/auth/me` 四支端點皆已實作並對真實共用 DB 驗證過（密碼錯誤／帳號停用／缺 token 三條路徑）。角色層級的存取控制（AC-01-3／AC-01-4）走 `@PreAuthorize`，目前尚無受保護的寫入端點可掛，等對應 FR 開發時再加。
+- Track 1 `ssds-core/scoring` + `port/`（評分引擎，§5 全部公式）：`com.example.ssds.core.scoring` 下的純函式計算器（`ScoringEngine`／`WeightAllocator`／`GradeClassifier`／`ConfidenceCalculator`／`PercentileNormalizer`／`TrendSlopeCalculator`／`HeatCompositeCalculator`／`FestivalWindowCalculator`／`ClimateFitCalculator`／`PriceFitCalculator`／`ReviewRiskCalculator`／`LogisticsRiskCalculator`／`InventoryRiskCalculator`／`HeatVolumeGate`），零 JPA 依賴、可脫離資料庫單元測試。`com.example.ssds.core.port` 下 8 支介面（`WeightProfileRepositoryPort`、`GradeThresholdRepositoryPort`、`RiskRuleRepositoryPort`、`CategoryPercentilePopulationPort`、`HeatCompositeRepositoryPort`、`FestivalAffinityRepositoryPort`、`ClimateNormalRepositoryPort`、`AudienceMixRepositoryPort`、`ProductScoreRepositoryPort`）供 `ssds-infra` 之後實作（依賴反轉）。§11.1 黃金案例（86.89／4.00／82.89／B／confidence 86，及 11 月變體 90.69／A）與各因子公式的個別黃金驗算（§5.2.4 PRICE_FIT 0.682、§FR-17-2 CLIMATE 0.717、§FR-17-1 FESTIVAL 0.60 + 邊界值）共 13 個測試類別、40 個測試，`./gradlew :ssds-core:test` 全綠。
+  - **`LOGISTICS_RISK`／`INVENTORY_RISK` 的點數表為佔位值**：規格書 §5.2.2 只給出扣分上限（各 10）與黃金案例的單一結果（夏季+易融化→4；效期 180 天/MOQ 200→0），未定義每個條件的確切點數（不像 `REVIEW_RISK` 有完整公式）。已用 golden case 反推出一組自洽的預設值並在程式碼註解說明，性質等同附錄 A 的「待客戶確認」項目，正式門檻應由 SYS_ADMIN 透過 `risk_rule.threshold_json` 校準覆寫（`RiskRuleRepositoryPort` 已預留此介面）。
+  - **尚未串接 `ssds-infra`**：port 介面目前無任何實作，也沒有從 DB 讀資料組出 `BonusFactorInput`／`HeatSourceContribution` 等輸入的組裝層（例如 `ProductScoringOrchestrator`）。這是 Phase 2（`ssds-api` 組裝）或 Track 2（`ssds-infra`）的工作，而且 `audience_segment`／`category_audience_mix`／`grade_threshold`／`risk_rule`／`heat_composite_daily`／`category_climate_profile` 這幾張 v3.0 新增表目前在 `ssds-infra/entity` 完全沒有對應 Entity/Repository（見下方已知問題 3）。
 
 **已知問題（尚未修，使用者已表示資料庫與依賴先不動）**
 1. **`V900__seed_master_data.sql` 的種子密碼對不上**：註解宣稱明碼是 `Ssds@2026`，但實測所有帳號（`buyer@ssds.dev` 等）用這組密碼登入皆失敗，雜湊值與該明碼不匹配。目前沒有任何已知明碼能登入種子帳號。修法：重新產生正確的 BCrypt hash，開一支新的 dev migration（如 `V901`）覆蓋，而不是改 V900（已套用過，改了會讓 Flyway checksum 對不上）。
 2. **`ssds-infra` 測試編譯失敗**：`MigrationVerificationTest.java` 用了 Testcontainers（`org.testcontainers.*`），但 `ssds-infra/build.gradle` 沒宣告這個測試依賴，`./gradlew build`（不加 `-x test`）會在 `:ssds-infra:compileTestJava` 失敗。這是既有問題，不是 FR-01 改動造成的。跑 `./gradlew build -x test` 或針對個別模組 `:ssds-api:test` / `:ssds-core:test` 可繞開。
+3. ~~`ssds-infra` 缺少評分引擎需要的六張 v3.0 新增表的 Entity/Repository~~ **已於本次（2026-08-27）補上**，見下方 Track 2 進度。
 
-下一步照 §12.1／本檔 Phase 1 規劃，建議接著做 `ssds-core/scoring` + `port/`（評分引擎是後續 FR-02/04/05 的關鍵路徑）。
+**Track 2 進度（2026-08-27）：`ssds-infra` 補齊評分引擎所需的 Entity/Repository + port 實作**
+- 新增 6 個 Entity + Repository（對照本機還原的真實 schema逐欄核對）：`AudienceSegment`、`CategoryAudienceMix`（複合鍵 `CategoryAudienceMixId`）、`GradeThreshold`（複合鍵 `GradeThresholdId`）、`RiskRule`（`threshold_json` 存 `String`，同 `AiInsight.contentJson` 的既有慣例，不反序列化成物件）、`HeatCompositeDaily`（複合鍵 `HeatCompositeDailyId`）、`CategoryClimateProfile`（與 `Category` 1:1 共用主鍵，同 `CategoryLeadTime` 寫法）。
+- 補上三個既有 Entity 缺欄位的落差（皆已用本機 DB 的 `\d` 輸出核對過欄位存在，非猜測）：`ScoreFactor` 缺 `note`（§7.2.6 有此欄，AC-05 的因子註記要用）；`HeatReading` 的 `keyword` 寫死 `optional=false`、且完全沒有 `category` 欄位，導致 Instagram 這種品類級來源（§FR-06、§5.3.2）存不進去；`HeatSource` 缺 `granularity`，沒有它就套不了 §5.3.2 的品類級 0.5 折扣。
+- `ssds-core/port` 8 支介面中的 7 支已在 `ssds-infra/port` 實作（`*RepositoryPortAdapter`，`@Component`）：`WeightProfileRepositoryPort`、`GradeThresholdRepositoryPort`、`RiskRuleRepositoryPort`、`ClimateNormalRepositoryPort`、`AudienceMixRepositoryPort`、`FestivalAffinityRepositoryPort`、`HeatCompositeRepositoryPort`、`ProductScoreRepositoryPort`（寫入路徑；同鍵重複評分時會先把舊的 `is_active` 現行列改 false 再寫新列，符合 §5.10）。
+- 順手修正 `ssds-core` 的 port 設計缺口：`ProductScoreRepositoryPort.save()` 原本沒有 `confidence` 參數（`ScoringResult` 本來就不含信心度，是 `ConfidenceCalculator` 另外算的），且沒有擋「資料不足時不該寫 product_score 列」——`grade` 欄位 DB 端是 NOT NULL，若把 `sufficientData=false` 的結果硬寫進去會在 flush 時才炸。現在 adapter 對此直接丟 `IllegalArgumentException`，逼呼叫端在呼叫前過濾。
+- **`CategoryPercentilePopulationPort` 已實作**（`CategoryPercentilePopulationPortAdapter`），母體查詢自 `score_factor.raw_value`（同 period、同品類，只取 `data_available=true` 的列；`ScoreFactorRepository` 新增三支對應 `@Query`）。**語意上有個必須遵守的隱含順序，寫在該 adapter 的 class Javadoc 裡**：母體是「同一 period 內其他品項這個因子的原始值」，所以全量重評必須分兩段跑——第一段把該批次全部品項的原始值先寫進 `score_factor`（`normalized_value` 可先留 null），第二段才呼叫本介面做正規化；不能一邊算一邊逐品項正規化，否則批次裡最先算的品項會拿到不完整的母體。這個兩段式順序由呼叫端（評分批次編排）保證，port 本身無法強制。
+  - 順手修正 port 介面本身的型別錯誤：`CategoryPercentilePopulationPort` 原本簽章是 `LocalDate period`，但系統的 period 概念是 ISO 週字串（`product_score.period`，如 `2026W30`），不是日期——寫介面時想成了「某一天」，接上 `ScoreFactorRepository` 才發現對不上，已改為 `String period`。
+- 驗證方式：`./gradlew build -x test` 全模組編譯過；`SPRING_PROFILES_ACTIVE=local` 對本機 DB 跑 `bootRun`，Hibernate `ddl-auto=validate` 通過。`ssds-infra` 尚無新增測試——既有的 `MigrationVerificationTest` 編譯失敗（已知問題 2）擋住了整個模組的測試編譯，新 adapter 要嘛等該問題解決、要嘛改用 Mockito 純單元測試繞過，本次未做。
+
+`ssds-core/port` 8 支介面**全部**已在 `ssds-infra/port` 實作完畢。
+
+下一步照 §12.1／本檔 Phase 1 規劃：Track 1（`ssds-core/scoring`）與 Track 2 的資料存取層（含全部 port 實作）已完成，下一個關鍵路徑是 Phase 2 的評分批次編排——一個串起所有 port + calculator 的 orchestrator（跑在 `ssds-api` 或新的 service 層），把 §5.10 的觸發時機表接上排程／API 觸發點，並落實上面兩段式批次順序。這是目前唯一還沒人碰過的整合層，其餘 track（AI／熱度資料層／前端）可平行推進，但最終串接評分結果都要經過這一層。
+
+## 本機開發資料庫（2026-08-27）
+
+改用本機 Docker Postgres 開發，不再直接連共用 Supabase。設定與操作見 `CLAUDE.md`「Backend」一節；重點：
+- `ai-products-selection-backend/docker-compose.yml`：`postgres:17-alpine`（對齊遠端 17.6），`docker compose up -d` 啟動。
+- 本機資料是遠端的一次性鏡像（`pg_dump --data-only` 撈回，schema 由 `db/migration` 19 支腳本重新套用），47 張表、真實列數（如 `product` 31 筆、`heat_composite_daily` 1850 筆），非即時同步。
+- `.env` 已切換為本機連線，`SPRING_PROFILES_ACTIVE=local`（**不可用預設的 `dev`**——`dev` 會多套 `db/dev` 的種子 migration V900+，跟已還原的真實資料主鍵衝突，此為實測結果非推測）。
+- 遠端連線設定備份於 `ai-products-selection-backend/.scratch/env.remote.backup`（已 gitignore），要切回遠端時複製覆蓋 `.env` 即可。
 
 ## 平行開發注意事項
 

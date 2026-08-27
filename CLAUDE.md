@@ -26,7 +26,9 @@ Two independent repos-in-one-checkout, no shared code — contract is `openapi.j
 ./gradlew :ssds-api:bootRun              # run the API (needs .env, see below)
 ```
 
-Copy `.env.example` to `.env` in the repo root first and fill `SSDS_DB_PASSWORD` (ask the schema maintainer for it — this is a **shared Supabase Postgres instance**, not a local DB). Do not connect as `postgres`; the app role is `ssds_app` and cannot run DDL or touch `flyway_schema_history`. Only the person applying a migration sets `SSDS_FLYWAY_ENABLED=true` with the `postgres` migration credentials — everyone else leaves Flyway disabled.
+**This checkout runs against a local Docker Postgres, not the shared Supabase instance.** `ai-products-selection-backend/docker-compose.yml` defines it (`postgres:17-alpine`, matches remote's 17.6); `.env` already points at it (`localhost:5432`, `SPRING_PROFILES_ACTIVE=local`, `SSDS_FLYWAY_ENABLED=true` with local `postgres` superuser creds). Start it with `docker compose up -d` from `ai-products-selection-backend/`. The local DB was seeded on 2026-08-27 via `pg_dump --data-only` from the shared Supabase instance (schema applied fresh from `db/migration` via a throwaway Flyway container, then real data restored) — it is a point-in-time mirror, not live-synced. Do **not** boot with the default `dev` profile against this DB: `dev` additionally applies `db/dev`'s seed migrations (`V900+`), which collide on primary key with the already-restored real data (confirmed by reproducing the failure) — that's why `.env` pins `SPRING_PROFILES_ACTIVE=local`.
+
+Original remote connection details are preserved in `ai-products-selection-backend/.scratch/env.remote.backup` (gitignored) if you need to point back at the shared Supabase instance — copy it over `.env` to switch back. When doing so: don't connect as `postgres`; the app role is `ssds_app` and cannot run DDL or touch `flyway_schema_history`. Only the person applying a migration sets `SSDS_FLYWAY_ENABLED=true` with the `postgres` migration credentials — everyone else leaves Flyway disabled.
 
 ### Frontend (`ai-products-selection-frontend/`)
 
