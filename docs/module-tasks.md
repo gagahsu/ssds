@@ -94,6 +94,18 @@ Phase 0 契約凍結後，以下五條線互不依賴，可各開一個 git work
 
 ---
 
+## 進度與已知問題（2026-08-27）
+
+**已完成**
+- Phase 0：DB schema（Flyway V1~V20，對齊 §7.2）、前端路由骨架。
+- FR-01 登入與權限（後端）：`AuthService`／`JwtTokenProvider`／`SecurityConfig` 等，見 `ai-products-selection-backend/ssds-api/src/main/java/com/example/ssds/api/security/`。`/auth/login`、`/auth/refresh`、`/auth/logout`、`/auth/me` 四支端點皆已實作並對真實共用 DB 驗證過（密碼錯誤／帳號停用／缺 token 三條路徑）。角色層級的存取控制（AC-01-3／AC-01-4）走 `@PreAuthorize`，目前尚無受保護的寫入端點可掛，等對應 FR 開發時再加。
+
+**已知問題（尚未修，使用者已表示資料庫與依賴先不動）**
+1. **`V900__seed_master_data.sql` 的種子密碼對不上**：註解宣稱明碼是 `Ssds@2026`，但實測所有帳號（`buyer@ssds.dev` 等）用這組密碼登入皆失敗，雜湊值與該明碼不匹配。目前沒有任何已知明碼能登入種子帳號。修法：重新產生正確的 BCrypt hash，開一支新的 dev migration（如 `V901`）覆蓋，而不是改 V900（已套用過，改了會讓 Flyway checksum 對不上）。
+2. **`ssds-infra` 測試編譯失敗**：`MigrationVerificationTest.java` 用了 Testcontainers（`org.testcontainers.*`），但 `ssds-infra/build.gradle` 沒宣告這個測試依賴，`./gradlew build`（不加 `-x test`）會在 `:ssds-infra:compileTestJava` 失敗。這是既有問題，不是 FR-01 改動造成的。跑 `./gradlew build -x test` 或針對個別模組 `:ssds-api:test` / `:ssds-core:test` 可繞開。
+
+下一步照 §12.1／本檔 Phase 1 規劃，建議接著做 `ssds-core/scoring` + `port/`（評分引擎是後續 FR-02/04/05 的關鍵路徑）。
+
 ## 平行開發注意事項
 
 1. Phase 0 的 DB schema / port 介面 / OpenAPI 契約沒定案前，別開 Phase 1 的 worktree — 各 track 對介面理解會分歧，事後合併對不上。

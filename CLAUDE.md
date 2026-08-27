@@ -13,7 +13,7 @@ Two independent repos-in-one-checkout, no shared code — contract is `openapi.j
 - `ai-products-selection-backend/` — Gradle multi-module Spring Boot 4.1 / Java 21
 - `ai-products-selection-frontend/` — Angular 21 + Angular Material
 
-**Current state (check before assuming a feature exists):** DB schema and `ssds-infra` entities/repositories are complete and aligned to spec. `ssds-core` has only domain enums/DTOs — the scoring engine (`§5` of the spec) and the `port/` interfaces are not yet written. `ssds-ai`, `ssds-ingest`, `ssds-calibration` are empty. `ssds-api` has one controller (`TrendController`). Frontend routing skeleton matches the spec's route table but most feature folders are empty stub components; `products` and `admin` have real content. Treat `openapi.json` as possibly stale until the backend controllers it describes actually exist.
+**Current state (check before assuming a feature exists):** DB schema and `ssds-infra` entities/repositories are complete and aligned to spec. `ssds-core` has only domain enums/DTOs — the scoring engine (`§5` of the spec) and the `port/` interfaces are not yet written. `ssds-ai`, `ssds-ingest`, `ssds-calibration` are empty. `ssds-api` has `TrendController` and, as of FR-01, full JWT auth (`AuthController` + `ssds-api/security/*` — login/refresh/logout/me, lockout, stateless filter chain). Frontend routing skeleton matches the spec's route table but most feature folders are empty stub components; `products` and `admin` have real content. Treat `openapi.json` as possibly stale until the backend controllers it describes actually exist. See `docs/module-tasks.md` for the full progress/known-issues log — check it before starting new module work.
 
 ## Commands
 
