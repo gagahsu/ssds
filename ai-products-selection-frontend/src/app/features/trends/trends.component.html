@@ -1,1 +1,72 @@
-<p>trends works!</p>
+<div class="trends-page">
+  <h1>S-07 趨勢分析</h1>
+
+  @if (loading()) {
+    <mat-spinner diameter="32"></mat-spinner>
+  } @else if (trends().length === 0) {
+    <p class="empty">目前無趨勢訊號資料</p>
+  } @else {
+    <table mat-table [dataSource]="trends()" class="trends-table">
+      <ng-container matColumnDef="keyword">
+        <th mat-header-cell *matHeaderCellDef>關鍵字</th>
+        <td mat-cell *matCellDef="let row">{{ row.keyword }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="heatToday">
+        <th mat-header-cell *matHeaderCellDef>今日熱度</th>
+        <td mat-cell *matCellDef="let row">{{ row.heatToday }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="slope7d">
+        <th mat-header-cell *matHeaderCellDef>7 日斜率</th>
+        <td mat-cell *matCellDef="let row">{{ row.slope7d }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="slope30d">
+        <th mat-header-cell *matHeaderCellDef>30 日斜率</th>
+        <td mat-cell *matCellDef="let row">{{ row.slope30d }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="aiSignal">
+        <th mat-header-cell *matHeaderCellDef>AI 訊號</th>
+        <td mat-cell *matCellDef="let row">{{ row.aiSignal }}</td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr
+        mat-row
+        *matRowDef="let row; columns: displayedColumns"
+        class="trend-row"
+        (click)="toggleRow(row)"
+      ></tr>
+    </table>
+
+    @if (expandedKeywordId() !== null) {
+      <div class="detail-panel">
+        @if (chartLoading()) {
+          <mat-spinner diameter="24"></mat-spinner>
+        } @else {
+          <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="sparkline">
+            <polyline [attr.points]="sparklinePoints(chart())" fill="none" stroke="currentColor" stroke-width="1.5" />
+          </svg>
+
+          @if (detail(); as d) {
+            <div class="detail-meta">
+              <span>{{ d.keyword }}</span>
+              <span>今日熱度：{{ d.heatToday }}</span>
+              <span>AI 解讀：{{ d.aiSignal }}</span>
+            </div>
+
+            @if (d.sourceDetails && d.sourceDetails.length > 0) {
+              <ul class="source-list">
+                @for (source of d.sourceDetails; track $index) {
+                  <li>{{ source | json }}</li>
+                }
+              </ul>
+            }
+          }
+        }
+      </div>
+    }
+  }
+</div>

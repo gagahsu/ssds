@@ -1,58 +1,47 @@
 export type UserRole =
-
   | 'BUYER'        // 採購專員
-
   | 'BUYER_LEAD'   // 採購主管
-
   | 'DATA_ADMIN'   // 資料管理員
-
   | 'SYS_ADMIN'    // 系統管理員
-
   | 'VIEWER';      // 唯讀觀察者
 
-
 export const USER_ROLE_LABELS: Record<UserRole, string> = {
-
   BUYER: '採購專員',
-
   BUYER_LEAD: '採購主管',
-
   DATA_ADMIN: '資料管理員',
-
   SYS_ADMIN: '系統管理員',
-
-  VIEWER: '唯讀觀察者'
-
+  VIEWER: '唯讀觀察者',
 };
 
 export interface LoginRequest {
-
-  email:string;
-
-  password:string;
-
+  email: string;
+  password: string;
 }
 
-export interface UserInfo {
-
-  id: string | number;
-
-  username: string;
-
-  name: string;
-
-  role: UserRole; // 權限區分
-
-  avatarUrl?: string;
-
+/** 對應後端 com.example.ssds.core.dto.TokenPair */
+export interface TokenPair {
+  accessToken: string;
+  refreshToken: string;
 }
 
-export interface LoginResponse {
-  accessToken: string; // 訪問token
+/** 對應後端 com.example.ssds.core.dto.AuthenticatedUser（/auth/me 回傳） */
+export interface AuthenticatedUser {
+  id: number;
+  email: string;
+  displayName: string;
+  roles: UserRole[];
+}
 
-  refreshToken?: string; // 刷新token
+/** 對應後端 com.example.ssds.core.dto.LoginResult（/auth/login 回傳） */
+export interface LoginResult {
+  tokens: TokenPair;
+  user: AuthenticatedUser;
+}
 
-  expiresIn?: number; //token有效時間
-
-  user: UserInfo;//用戶權限
+/** 對應後端 com.example.ssds.api.common.response.ApiResponse<T> 信封 */
+export interface ApiEnvelope<T> {
+  success: boolean;
+  data: T;
+  error: { code: string; message: string } | null;
+  timestamp: string;
 }
