@@ -1,0 +1,27 @@
+.product-detail-page {
+  padding: 1rem;
+  max-width: 640px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 8rem 1fr;
+  row-gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.detail-grid dt {
+  color: #666;
+}
+
+.hint {
+  margin-top: 1.5rem;
+  color: #999;
+  font-size: 0.85rem;
+}

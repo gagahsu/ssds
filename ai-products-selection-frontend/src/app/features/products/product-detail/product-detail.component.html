@@ -1,1 +1,38 @@
-<p>product-detail works!</p>
+<div class="product-detail-page">
+  @if (loading()) {
+    <mat-spinner diameter="32"></mat-spinner>
+  } @else if (product(); as p) {
+    <div class="header">
+      <h1>{{ p.name }}</h1>
+      <div class="actions">
+        <button mat-button (click)="edit()">編輯</button>
+        @if (p.status === 'DRAFT') {
+          <button mat-button (click)="markEvaluating()">送出評估</button>
+        }
+        @if (p.status === 'ADOPTED') {
+          <button mat-button (click)="markListed()">標記上架</button>
+        }
+        <button mat-button color="warn" (click)="remove()">刪除</button>
+      </div>
+    </div>
+
+    <dl class="detail-grid">
+      <dt>類別</dt><dd>{{ p.categoryName }}</dd>
+      <dt>軌別</dt><dd>{{ p.trackType }}</dd>
+      <dt>供應商</dt><dd>{{ p.supplierName ?? '—' }}</dd>
+      <dt>成本</dt><dd>{{ p.trackType === 'B' ? '—' : (p.cost ?? '—') }}</dd>
+      <dt>建議售價</dt><dd>{{ p.trackType === 'B' ? '—' : (p.suggestedPrice ?? '—') }}</dd>
+      <dt>毛利率</dt>
+      <dd>{{ p.trackType === 'B' || p.marginRate == null ? '—' : (p.marginRate * 100).toFixed(1) + '%' }}</dd>
+      <dt>最小訂購量</dt><dd>{{ p.moq ?? '—' }}</dd>
+      <dt>效期天數</dt><dd>{{ p.shelfLifeDays ?? '—' }}</dd>
+      <dt>物流條件</dt><dd>{{ p.logisticsCondition ?? '—' }}</dd>
+      <dt>狀態</dt><dd>{{ p.status }}</dd>
+      <dt>尋源狀態</dt><dd>{{ p.sourcingStatus ?? '—' }}</dd>
+      <dt>關聯關鍵字</dt><dd>{{ p.keywords?.length ? p.keywords?.join('、') : '—' }}</dd>
+      <dt>最近評分狀態</dt><dd>{{ p.lastScoringStatus ?? '尚未評分' }}</dd>
+    </dl>
+
+    <p class="hint">AI 賣點／風險摘要與評分因子明細待 AI 引擎（Track 3）與評分批次排程接上後顯示。</p>
+  }
+</div>

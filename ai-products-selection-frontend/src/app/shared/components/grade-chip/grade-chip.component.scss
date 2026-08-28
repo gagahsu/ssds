@@ -1,0 +1,30 @@
+.grade-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.75rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.grade-A {
+  background: #e6f4ea;
+  color: #1e7e34;
+}
+
+.grade-B {
+  background: #fff4e0;
+  color: #b06d00;
+}
+
+.grade-C {
+  background: #f1f1f1;
+  color: #666;
+}
+
+.grade-none {
+  background: transparent;
+  color: #999;
+}

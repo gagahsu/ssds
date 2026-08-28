@@ -25,6 +25,21 @@ export const routes: Routes = [
         m => m.ProductListComponent
       )
     },
+    {path:'products/new',loadComponent:()=>
+      import('./features/products/product-form/product-form.component').then(
+        m => m.ProductFormComponent
+      )
+    },
+    {path:'products/:id/edit',loadComponent:()=>
+      import('./features/products/product-form/product-form.component').then(
+        m => m.ProductFormComponent
+      )
+    },
+    {path:'products/:id',loadComponent:()=>
+      import('./features/products/product-detail/product-detail.component').then(
+        m => m.ProductDetailComponent
+      )
+    },
     {path:'ranking',loadComponent:()=>
       import('./features/ranking/ranking.component').then(
         m => m.RankingComponent

@@ -174,6 +174,94 @@ Phase 0 契約凍結後，以下五條線互不依賴，可各開一個 git work
 
 本機 DB（遠端 pg_dump 鏡像）原本就帶著 `REVIEW_RISK`／`LOGISTICS_RISK`／`INVENTORY_RISK` 三筆全域 `risk_rule` 列，但格式是 v2.0 舊模型：camelCase key（如 `negativeRateThreshold`）、`LOGISTICS_RISK` 用 `{"conditions":[...]}`（命中任一條件即扣滿 `max_penalty`，不是逐條件加總）、`max_penalty` 為 12／13／15，跟 §5.2.2 v3.0 定義的逐條件點數表、`FactorCode` 的結構性上限（10／10／20）都對不上。§5.2.2 原文本身就說明這正是「v2.0 只給上限與觸發條件文字描述」的樣子——按 CLAUDE.md「spec 與現況衝突時 spec 贏」，改用 `V22__align_risk_rule_seed_to_spec_v3.sql`（**UPDATE 而非 INSERT**，避免撞 `uk_risk_rule` 唯一鍵）把這三筆全域列的 `threshold_json`／`max_penalty` 對齊 orchestrator 目前讀取的 key 名稱與 §5.2 的結構性上限。`category_id = 12` 的 `INVENTORY_RISK` 品類覆寫列**刻意未動**，是否沿用 v2.0 門檻待 SYS_ADMIN 確認。**只套用到本機 Docker Postgres**（`.env` 全程指向 `localhost`，未切換到遠端連線設定），未觸碰共用 Supabase。`./gradlew :ssds-api:test :ssds-core:test` 全綠（含本機 DB 跑過 Flyway V22 的 `SsdsApplicationTests`）。
 
+## FR-03 品項管理（前後端全端，2026-08-28）
+
+依規劃「哪些功能可以前後端一起做」清單完成的第一項：`ssds-infra` 的 `Product` 相關 schema/entity 早就備妥、`ssds-api` 只有 `TrendController`／`AuthController`，這條線可以獨立於 AI（Track 3）與評分批次排程（Phase 2 觸發時機表）之外先做完整 CRUD。
+
+**後端**
+- 新增 `ssds-api/product/`（`ProductService`、`ProductSpecifications`）與 `controller/ProductController`／`CategoryController`／`SupplierController`，對應 §8.2 `/products`、`/categories`、`/suppliers`。實作範圍：`GET /products`（篩選：`keyword`／`categoryId`／`supplierId`／`trackType`／`sourcingStatus`／`status`，分頁排序）、`GET /products/{id}`、`POST`、`PUT`、`PATCH /{id}/status`、`DELETE`（軟刪除）。
+  - **`grade`／`minScore`／`maxScore`／`hasRisk` 四個查詢參數目前不受理**（傳了會被忽略，不回錯誤）：這四個需要 join `product_score`／`risk_alert`，屬於評分批次接上後才能做的範圍，原因與下面 FR-04 的說明相同——見 `ProductSpecifications` 的 class Javadoc。
+  - `ProductController.changeStatus` 只允許 §7.4 狀態機裡「不經決策」的兩條直接轉換（`DRAFT→EVALUATING`、`ADOPTED→LISTED`）；其餘轉換（`WATCHING`／`REJECTED`／`REJECTED→EVALUATING`）綁在「建立決策」（FR-11，尚未實作），目前一律回 `409 INVALID_STATE_TRANSITION`。
+  - 權限依 §2.1：清單/詳情含 `VIEWER`（第 2 列），新增/編輯/改狀態排除 `VIEWER`（第 4 列），軟刪除僅 `BUYER_LEAD`／`SYS_ADMIN`（第 5 列）。
+- **`Product` entity 補上規格已定義但先前漏掉的欄位**：`deletedAt`／`deletedBy`（§7.2、§7.4 軟刪除，DB 早在 V17 就有這兩欄，entity 一直沒對應）、`idealTempMin`／`idealTempMax`（§FR-03-2「供評分使用的欄位」、CLIMATE 因子輸入，DB 在 V13 就有）。加了 `@SQLRestriction("deleted_at IS NULL")`，所有既有查詢（含 `ProductRepository` 既有方法）自動排除軟刪除列，不用逐一改查詢條件。
+- `ProductScoreRepository` 新增 `findActivePrimaryByProductIds`，品項清單的「最新分數」欄位一次批次查完，避免逐列 N+1。
+- **openapi-generator 的 operationId 衝突**：`CategoryController`／`SupplierController`／`TrendController` 若都用預設方法名 `list`，openapi-generator 產生 TS client 時會把後兩者自動改名成 `list1`／`list2` 這種脆弱名稱（每次重新排序都可能變號）。已把後端方法名固定成 `listCategories`／`listSuppliers`，往後新加清單端點務必用有語意的方法名，不要用裸 `list`。
+
+**前端**
+- `product-list`／`product-detail`／`product-form` 三個 stub 補齊實作，串接 `ProductControllerService`（openapi-generator 產出）。清單頁含篩選、分頁（20/50/100）、依 B 軌規則隱藏成本/售價/毛利率/分數/分級欄位（§FR-03-1）。
+- 新增共用元件 `shared/components/grade-chip`（原本也是空 stub），品項清單與詳情共用分級徽章。`score-bar`／`empty-state`／`page-header` 仍是空 stub，本次未用到、未補。
+- 路由新增 `/products/new`、`/products/:id`、`/products/:id/edit`（原本 `app.routes.ts` 只有 `/products` 清單）。
+- `openapi.json` 已重新從本機後端 `/v3/api-docs` 匯出並重新 `npm run generate:api`，`core/api` 新增 `productController`／`categoryController`／`supplierController` 的 service + model。**`authController.service.ts` 也一併生成了**（先前 `AuthController` 存在但沒人重新匯出過 openapi.json）；現有的 `core/auth/auth.service.ts` 手刻版本繼續使用，兩者並存，未合併，如日後要統一改走 generated client 需另外處理。
+
+**驗證**
+- 後端：對本機 DB 手動跑過 login／list／get／篩選／create（含成本≥售價擋存、同名警告）／狀態機（合法轉換成功、非法轉換 409）／軟刪除（非 owner role 403、SYS_ADMIN 200 後 404）全部路徑，`./gradlew build -x test` 與 `:ssds-api:test :ssds-core:test` 全綠。
+- 前端：`npx ng build` 過（僅 bundle size 略超預算的警告，非錯誤）；`npx ng test --watch=false` 42 個檔案中 3 個既有失敗（`app.spec.ts`、`main-layout`、`confirm-dialog`，皆為既有 baseline 失敗，與本次改動無關，已用 `git stash` 比對確認）之外全綠，含新增的 3 個 spec。
+- **本機種子帳密**（已知問題 1 的部分繞過）：把 `buyer@ssds.dev`／`sysadmin@ssds.dev` 兩個本機帳號的 `password_hash` 改成明碼 `Test@12345`（BCrypt），方便本機開發登入測試。**只動了本機 Docker Postgres**，未觸碰共用 Supabase；known issue 1（V900 seed 密碼對不上明碼）本身仍未修。
+
+**未做，留給下一步**
+1. `POST /products/{id}/images`、`PUT /products/{id}/festival-affinity`、`POST /products/batch/analyze`（§8.2 品項相關端點，但依賴圖片儲存／節慶維護／AI 任務，超出本次範圍）。
+2. B 軌新增流程的關鍵字選擇 UI（目前表單只提示「請至少關聯一個關鍵字」，未做關鍵字下拉/搜尋元件）。
+3. 品項清單依分數/分級/風險篩選（見上方「不受理」說明）。
+
+## FR-10 風險示警中心（前後端全端，2026-08-28）
+
+規劃清單第二項。`risk_alert` 的 entity/repo 早就存在（`ProductScoringOrchestrator` 已會寫 `PENALTY_CAP`／`DATA_INSUFFICIENT` 兩種示警），但沒有任何 controller 曝露出來，且本機 DB 種子資料裡已經有 `REVIEW_RISK`／`LOGISTICS_RISK`／`INVENTORY_RISK`／`PENALTY_CAP`／`HEAT_CRASH`／`SEASON_MISMATCH`／`LOW_CONFIDENCE` 七種示警的真實資料可以直接測，同樣不受 Track 3（AI）／評分批次排程未接上的影響。
+
+**後端**
+- 新增 `ssds-api/risk/`（`RiskAlertService`、`RiskAlertSpecifications`）與 `controller/RiskAlertController`，對應 §8.2 `GET /risks`（篩選 `status`／`severity`／`type`／`categoryId`，未指定 `status` 時依 AC-10-2 預設排除 `IGNORED`）、`PATCH /risks/{id}/acknowledge`、`PATCH /risks/{id}/ignore`（理由必填，對齊 DB 既有的 `ck_risk_ignore_reason` CHECK）。
+- `RiskAlertRepository` 加上 `JpaSpecificationExecutor`，篩選組合邏輯與 FR-03 的 `ProductSpecifications` 同一套寫法。
+- 權限依 §2.1：清單含 `VIEWER`（第 2 列），標記已處理／忽略排除 `VIEWER`／`DATA_ADMIN`（第 14 列：`BUYER`／`BUYER_LEAD`／`SYS_ADMIN`）。
+- **`GET /risks/rules`／`PUT /risks/rules/{code}`（§FR-10-3 風險門檻調整＋觸發背景全量扣分重算）本次未做**：門檻讀取本身簡單（`RiskRuleRepositoryPort` 已存在），但規格要求「立即觸發背景全量扣分重算，頁首顯示進度」，需要非同步任務追蹤機制，目前 `ProductScoringOrchestrator.runFullBatch` 只是個同步方法、沒有任何任務佇列/進度回報基礎設施，屬於下一步「評分批次觸發時機表」要一併解決的範圍，不在本次 MVP 內單獨湊一個簡化版。
+- `RiskAlertController.listRisks`（不叫裸 `list`，理由同 FR-03 筆記：避免 openapi-generator 跨 controller 撞名產生 `list1`/`list2`）。
+
+**前端**
+- `features/risks/risks.component.*` 從空 stub 補齊：篩選（狀態、嚴重度）、分頁、標記已處理／忽略（忽略跳自訂的 `ignore-reason-dialog.component.ts` 收必填理由，未套用既有的 `DialogService.Confirm`，因為那支只支援是非確認、不支援文字輸入）、點品項名稱跳轉 `/products/:id`。
+- `openapi.json` 已重新匯出、`npm run generate:api` 已重跑，`core/api` 新增 `riskAlertController` service/model。
+
+**驗證**
+- 後端：對本機 DB 手動跑過清單（預設排除 IGNORED／篩 `status=IGNORED`）、`acknowledge`、`ignore`（缺理由 400、附理由 200）、角色門檻（`VIEWER` 查清單 200、改狀態 403）；測試用的 2 筆狀態異動已還原回 `OPEN`。`:ssds-api:test :ssds-core:test` 全綠。
+- 前端：`npx ng build` 過；`npx ng test --watch=false` 同 FR-03 的 3 個既有 baseline 失敗之外全綠，含新增的 risks spec。
+
+## FR-08 情境權重組設定（前後端全端，2026-08-28）
+
+規劃清單第三項。`weight_version`／`weight_profile`／`grade_threshold` 三張表的 entity/repo 早就存在（評分引擎讀取用），本機 DB 也有真實的三個版本（v1 RETIRED、v2 APPROVED 且生效中、v3 DRAFT 校準建議）可以直接測。
+
+**後端**
+- 新增 `ssds-api/weight/WeightVersionService` 與 `controller/WeightVersionController`，對應 §8.2 `GET /weight-versions`、`GET /weight-versions/active`、`GET /weight-versions/{id}/profiles`、`POST /weight-versions`（建立草稿）、`PUT /weight-versions/{id}`（編輯草稿）。
+- 權限依 §2.1：讀取含 `VIEWER`（第 2 列）；建立/編輯草稿**僅 `BUYER_LEAD`**（第 15 列——矩陣上這一列連 `SYS_ADMIN` 都沒有，故意的，見規格書「拆分調整評分權重」修正）。
+- **`POST /weight-versions/{id}/approve`（§FR-08-3 核准生效並觸發全量重算）本次未做**：規格要求核准後立即觸發背景全量扣分重算並在頁首顯示進度，但目前 `ProductScoringOrchestrator.runFullBatch` 只是個同步方法，沒有任務佇列/進度回報機制——跟 FR-10 的 `PUT /risks/rules/{code}` 是同一個缺口，都排進「評分批次觸發時機表」再一併處理，不湊簡化版。
+- AC-08-1 驗證（同一情境六因子權重加總須為 1.000，且不可混入扣分因子）在 `WeightVersionService.validateScenes` 做，命中回既有的 `WEIGHT_SUM_INVALID`（409）。
+- **踩到一個雷**：`applyScenes` 存完 `WeightProfile` 後，若直接 `weightVersionRepository.findWithProfilesById(id)` 重新查詢，因為 JPA 一級快取命中同一個受管理的 `WeightVersion` 實例，`profiles` 集合不會真的重新載入，回傳的權重會是空的——已改成存檔當下同步把新列加進 `version.getProfiles()`，不能只依賴重新查詢。若之後有類似「存完子表再讀父實體聚合欄位」的寫法，記得這個陷阱。
+- `WeightVersionController` 的 `list`／`create`／`update` 這次直接命名為 `listWeightVersions`／`createWeightVersion`／`updateWeightVersion`（連同本次順手把 `ProductController` 的 `list`／`create`／`update` 也改名為 `listProducts`／`createProduct`／`updateProduct`）：openapi-generator 對裸 `list`/`create`/`update` 這類菜市場名字跨 controller 撞名時的解法（自動加 `1`/`2` 尾碼）不穩定，同一批端點重新排序就可能換編號，前端程式碼看起來對不上意圖。**往後任何新 controller 的方法名都不要用裸的 `list`／`get`／`create`／`update`／`delete`，一律加資源名字首碼。**
+
+**前端**
+- `features/weights/weights.component.*` 從空 stub 補齊：版本清單 + 點列檢視四情境權重與門檻明細；`BUYER_LEAD`（`AuthService.hasRole('BUYER_LEAD')`，未套用空殼的 `has-role.directive.ts`）可「新增草稿版本」（預填目前檢視中版本的權重當起點，沒有就給全 0）與「編輯」草稿，逐因子輸入框即時顯示加總是否為 1.000。
+- 忽略示警的自訂 dialog（`ignore-reason-dialog.component.ts`）與本次共用同一批 Angular Material 表單元件慣例。
+
+**驗證**
+- 後端：對本機 DB 手動跑過清單、`active`、`profiles`（核對真實 v2 的四情境權重與門檻）、`BUYER` 建立草稿 403、`BUYER_LEAD` 建立草稿（權重總和錯誤 409 → 修正後 200）、編輯草稿 200、編輯已核准版本 409；測試建立的草稿已刪除還原。`:ssds-api:test :ssds-core:test` 全綠。
+- 前端：`npx ng build` 過；`npx ng test --watch=false` 同前兩項 FR 的 3 個既有 baseline 失敗之外全綠，含新增的 weights spec。
+
+## 規格書／畫面示意圖對照發現的缺口，已補（2026-08-28）
+
+Review FR-03／FR-10／FR-08 三項時，對照 開發規格書_v3.0.md 與 畫面功能示意圖_v3.0.html 發現兩處畫面已經在用、但規格書 §8.2 從未定義的端點，已補進規格書（純文件修正，未動 DB）：
+
+1. **`/products/batch/*` 三個批次端點**（`POST .../queue-score`、`PATCH .../category`、`PATCH .../status`）：§4 FR-03-1 表格與 S-03 畫面都有這三個批次操作，但 §8.2 先前只有 `POST /products/batch/analyze`（批次建立 AI 任務，完全不同的動作），三個操作本身連端點路徑都沒定義過。
+2. **`GET /weight-versions/{id}/scene-stats`**：S-09 畫面的「AI 選組規則卡」顯示判定數／覆寫率，資料來源是 `scene_classification_log`，但 §8.2 weight-versions 端點表與 AC-08-1～6 都沒提過這支端點。
+
+兩處都是「畫面已經在用、規格書漏定義」，不是畫面畫錯，所以修的是規格書 §8.2，畫面示意圖不用動。**這三個批次端點與 scene-stats 端點本身尚未實作**（FR-03 本次只做了 GET/POST/PUT/PATCH status/DELETE，見上方「FR-03 品項管理」段落的「未做，留給下一步」），此次只補文件缺口，實作留待之後。
+
+## 本次順手修的程式碼問題：API 回應時間格式不合 §8.1
+
+FR-03／FR-10／FR-08 三個 DTO（`ProductDetail`、`RiskAlertListItem`、`WeightVersionSummary`）的時間欄位原本直接沿用 entity 的 `Instant`（UTC），序列化到前端會帶 `Z` 尾碼，違反 §8.1「回應一律以 +08:00 呈現」（`CLAUDE.md` 也明文禁止 API 層用 `Instant`）。新增 `ApiTime.from(Instant)`（`ssds-api/common/util/`）統一轉換為 `Asia/Taipei` 的 `OffsetDateTime`，三個 Service 的 mapping 方法都改用這支，不在各處各自 `atZone(...)`。已對本機 DB 驗證三個端點回應皆為 `+08:00`，`:ssds-api:test :ssds-core:test` 全綠，前端已重新 `generate:api` 並 `ng build` 過。**往後任何新 DTO 若要回傳實體的時間欄位，一律經過 `ApiTime.from(...)`，不要直接把 `Instant` 放進 record。**
+
+## 前後端全端功能規劃：後續順序
+
+FR-03／FR-10／FR-08 三項（皆不依賴 Track 3 AI 或評分批次排程）已完成。共同的技術債／下一步：
+1. **評分批次觸發時機表**（§5.10）：FR-10 的門檻調整重算、FR-08 的核准重算，都卡在這裡沒有非同步任務追蹤機制。這是目前唯一同時擋住兩個功能繼續往下做（門檻調整、版本核准）的關鍵路徑，優先度最高。
+2. FR-04 選品分數排行：需要先有第 1 點的排行資料才有東西可查，其餘（`GET /scores/ranking` 等唯讀端點）依賴不大，可以先做唯讀清單，示範資料已有 `product_score` 種子列可用。
+3. FR-05 品項詳情的 AI 洞察區塊、FR-07 AI 任務中心：依賴 Track 3（AI），未動工前無法測。
+
 ## 平行開發注意事項
 
 1. Phase 0 的 DB schema / port 介面 / OpenAPI 契約沒定案前，別開 Phase 1 的 worktree — 各 track 對介面理解會分歧，事後合併對不上。

@@ -1,1 +1,115 @@
-<p>weights works!</p>
+<div class="weights-page">
+  <div class="page-toolbar">
+    <h1>情境權重組設定</h1>
+    @if (canManage) {
+      <button mat-raised-button color="primary" (click)="startNewDraft()">新增草稿版本</button>
+    }
+  </div>
+
+  @if (loading()) {
+    <mat-spinner diameter="32"></mat-spinner>
+  } @else {
+    <table mat-table [dataSource]="versions()" class="mat-elevation-z1">
+      <ng-container matColumnDef="versionNo">
+        <th mat-header-cell *matHeaderCellDef>版本</th>
+        <td mat-cell *matCellDef="let row">{{ row.versionNo }}</td>
+      </ng-container>
+      <ng-container matColumnDef="name">
+        <th mat-header-cell *matHeaderCellDef>名稱</th>
+        <td mat-cell *matCellDef="let row">{{ row.name }}</td>
+      </ng-container>
+      <ng-container matColumnDef="status">
+        <th mat-header-cell *matHeaderCellDef>狀態</th>
+        <td mat-cell *matCellDef="let row">{{ row.status }}</td>
+      </ng-container>
+      <ng-container matColumnDef="current">
+        <th mat-header-cell *matHeaderCellDef>生效中</th>
+        <td mat-cell *matCellDef="let row">{{ row.current ? '✓' : '' }}</td>
+      </ng-container>
+      <ng-container matColumnDef="effectiveFrom">
+        <th mat-header-cell *matHeaderCellDef>生效日</th>
+        <td mat-cell *matCellDef="let row">{{ row.effectiveFrom ?? '—' }}</td>
+      </ng-container>
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let row">
+          <button mat-button (click)="view(row)">檢視</button>
+        </td>
+      </ng-container>
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+    </table>
+  }
+
+  @if (selected(); as detail) {
+    <div class="detail-panel">
+      <div class="detail-header">
+        <h2>{{ detail.versionNo ?? '（新草稿）' }} — {{ detail.name }}</h2>
+        @if (canManage && !editing() && detail.status === 'DRAFT') {
+          <button mat-button (click)="edit()">編輯</button>
+        }
+      </div>
+
+      @if (editing()) {
+        <mat-form-field appearance="outline">
+          <mat-label>版本名稱</mat-label>
+          <input matInput [(ngModel)]="detail.name" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" style="width: 100%">
+          <mat-label>異動說明</mat-label>
+          <input matInput [(ngModel)]="detail.changeNote" />
+        </mat-form-field>
+      }
+
+      @for (scene of detail.scenes; track scene.sceneType) {
+        <div class="scene-block">
+          <h3>{{ scene.sceneType }}</h3>
+          <div class="factor-grid">
+            @for (f of factors; track f) {
+              <mat-form-field appearance="outline" class="factor-field">
+                <mat-label>{{ f }}</mat-label>
+                @if (editing()) {
+                  <input matInput type="number" step="0.01" [(ngModel)]="scene.weights[f]" />
+                } @else {
+                  <input matInput [value]="scene.weights[f]" disabled />
+                }
+              </mat-form-field>
+            }
+          </div>
+          <div class="threshold-row">
+            <mat-form-field appearance="outline" class="factor-field">
+              <mat-label>A 級門檻</mat-label>
+              @if (editing()) {
+                <input matInput type="number" [(ngModel)]="scene.gradeAMin" />
+              } @else {
+                <input matInput [value]="scene.gradeAMin" disabled />
+              }
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="factor-field">
+              <mat-label>B 級門檻</mat-label>
+              @if (editing()) {
+                <input matInput type="number" [(ngModel)]="scene.gradeBMin" />
+              } @else {
+                <input matInput [value]="scene.gradeBMin" disabled />
+              }
+            </mat-form-field>
+            @if (editing()) {
+              <span class="weight-sum" [class.invalid]="weightSum(scene) !== 1">
+                加總：{{ weightSum(scene) | number: '1.2-3' }}（須為 1.000）
+              </span>
+            }
+          </div>
+        </div>
+      }
+
+      @if (editing()) {
+        <div class="actions">
+          <button mat-button (click)="cancelEdit()">取消</button>
+          <button mat-raised-button color="primary" [disabled]="saving()" (click)="save()">
+            {{ saving() ? '儲存中…' : '儲存草稿' }}
+          </button>
+        </div>
+      }
+    </div>
+  }
+</div>

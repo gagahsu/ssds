@@ -1,0 +1,48 @@
+.risks-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.filters {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.filters mat-form-field {
+  min-width: 160px;
+}
+
+table {
+  width: 100%;
+}
+
+a {
+  cursor: pointer;
+  color: #1a73e8;
+}
+
+.severity-HIGH {
+  color: #c62828;
+  font-weight: 600;
+}
+
+.severity-MEDIUM {
+  color: #b06d00;
+}
+
+.severity-LOW {
+  color: #666;
+}
+
+.ignore-reason {
+  font-size: 0.8rem;
+  color: #999;
+}
+
+.loading-row {
+  display: flex;
+  justify-content: center;
+  padding: 2rem;
+}

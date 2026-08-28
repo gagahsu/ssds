@@ -13,6 +13,7 @@ import java.time.LocalDate;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import lombok.*;
+import org.hibernate.annotations.SQLRestriction;
 
 /**
  * 品項主檔（規格書 §7.2 product）。
@@ -29,6 +30,7 @@ import lombok.*;
 @AllArgsConstructor
 @Entity
 @Table(name = "product")
+@SQLRestriction("deleted_at IS NULL")
 public class Product extends BaseAuditEntity {
 
     @Id
@@ -99,9 +101,24 @@ public class Product extends BaseAuditEntity {
     @Column(name = "shelf_life_days")
     private Integer shelfLifeDays;
 
+    /** 適溫區間（°C），§FR-17-2 CLIMATE 因子輸入。未填時沿用品類預設值。 */
+    @Column(name = "ideal_temp_min", precision = 4, scale = 1)
+    private BigDecimal idealTempMin;
+
+    @Column(name = "ideal_temp_max", precision = 4, scale = 1)
+    private BigDecimal idealTempMax;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by")
     private AppUser createdBy;
+
+    /** 軟刪除（§7.4）。非 NULL 者不出現在任何清單、排行、評分批次與報表。 */
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "deleted_by")
+    private AppUser deletedBy;
 
     /** 最近一次評分嘗試的技術結果，NULL 表尚未嘗試過評分（§5.7 落地機制）。 */
     @Enumerated(EnumType.STRING)
@@ -141,6 +158,12 @@ public class Product extends BaseAuditEntity {
     /** B 軌不產生選品分數（AC-16-2）。 */
     public boolean isScorable() {
         return trackType == TrackType.A;
+    }
+
+    /** §7.4：任一狀態皆可軟刪除，狀態欄位不變，只標記 deleted_at/deleted_by。 */
+    public void softDelete(AppUser actor) {
+        this.deletedAt = Instant.now();
+        this.deletedBy = actor;
     }
 
     /**

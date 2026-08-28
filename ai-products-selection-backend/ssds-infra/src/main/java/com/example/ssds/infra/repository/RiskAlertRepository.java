@@ -8,16 +8,18 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.stereotype.Repository;
 
 /**
  * 風險示警（規格書 §7.2 risk_alert、FR-10）。
  *
- * <p>AC-10-2：預設清單排除 IGNORED，但可用篩選查回來 ——
- * 所以「預設查詢」與「全部查詢」是兩支方法，不是一支加旗標。
+ * <p>AC-10-2：預設清單排除 IGNORED，但可用篩選查回來 —— {@code JpaSpecificationExecutor}
+ * 讓 §8.2 {@code GET /risks} 的 status／severity／type／categoryId 任意組合篩選在執行期組裝
+ * （見 {@code RiskAlertSpecifications}），不必為每種組合寫衍生查詢方法。
  */
 @Repository
-public interface RiskAlertRepository extends JpaRepository<RiskAlert, Long> {
+public interface RiskAlertRepository extends JpaRepository<RiskAlert, Long>, JpaSpecificationExecutor<RiskAlert> {
 
     /** 預設清單：未忽略者。 */
     @EntityGraph(attributePaths = {"product", "product.category"})

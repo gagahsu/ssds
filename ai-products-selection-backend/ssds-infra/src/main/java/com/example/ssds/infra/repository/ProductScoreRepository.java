@@ -50,6 +50,16 @@ public interface ProductScoreRepository extends JpaRepository<ProductScore, Long
 
     boolean existsByProductIdAndPeriod(Long productId, String period);
 
+    /**
+     * FR-03-1 品項清單「最新分數」欄位：一次撈一批品項的現行主情境分數，避免逐列 N+1。
+     * 同一品項可能有多筆 is_active（不同情境），這裡只取主情境（is_primary）那筆。
+     */
+    @Query("""
+            select s from ProductScore s
+            where s.product.id in :productIds and s.active = true and s.primary = true
+            """)
+    List<ProductScore> findActivePrimaryByProductIds(@Param("productIds") List<Long> productIds);
+
     /** §5.10：同鍵重複評分時，寫入新紀錄前需先把舊的現行列改為非現行。 */
     List<ProductScore> findByProductIdAndPeriodAndSceneTypeAndActiveTrue(
             Long productId, String period, SceneType sceneType);

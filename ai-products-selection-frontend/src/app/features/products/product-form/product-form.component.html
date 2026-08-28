@@ -1,1 +1,77 @@
-<p>product-form works!</p>
+<div class="product-form-page">
+  <h1>{{ productId ? '編輯品項' : '新增品項' }}</h1>
+
+  @if (loading()) {
+    <mat-spinner diameter="32"></mat-spinner>
+  } @else {
+    <form [formGroup]="form" (ngSubmit)="submit()" class="form-grid">
+      <mat-form-field appearance="outline">
+        <mat-label>品項名稱</mat-label>
+        <input matInput formControlName="name" required />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>類別</mat-label>
+        <mat-select formControlName="categoryId" required>
+          @for (c of categories(); track c.id) {
+            <mat-option [value]="c.id">{{ c.name }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>軌別</mat-label>
+        <mat-select formControlName="trackType" required>
+          <mat-option value="A">A 軌（已有供應商）</mat-option>
+          <mat-option value="B">B 軌（尋源中）</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>供應商</mat-label>
+        <mat-select formControlName="supplierId">
+          <mat-option [value]="null">未指定</mat-option>
+          @for (s of suppliers(); track s.id) {
+            <mat-option [value]="s.id">{{ s.name }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      @if (!isBTrack) {
+        <mat-form-field appearance="outline">
+          <mat-label>成本</mat-label>
+          <input matInput type="number" formControlName="cost" required />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>建議售價</mat-label>
+          <input matInput type="number" formControlName="suggestedPrice" required />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>最小訂購量</mat-label>
+          <input matInput type="number" formControlName="moq" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>效期天數</mat-label>
+          <input matInput type="number" formControlName="shelfLifeDays" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>物流條件</mat-label>
+          <input matInput formControlName="logisticsCondition" placeholder="常溫／冷藏／冷凍／易碎／易融化" />
+        </mat-form-field>
+      } @else {
+        <p class="hint">B 軌品項尋源中，成本與售價待成案後補齊；請至少關聯一個趨勢關鍵字（暫由後續版本的關鍵字管理頁提供）。</p>
+      }
+
+      <div class="actions">
+        <button mat-button type="button" (click)="cancel()">取消</button>
+        <button mat-raised-button color="primary" type="submit" [disabled]="saving()">
+          {{ saving() ? '儲存中…' : '儲存' }}
+        </button>
+      </div>
+    </form>
+  }
+</div>

@@ -10,11 +10,11 @@
 
 
 export interface TrendSignalProjection { 
-    keyword?: string;
-    slope7d?: number;
-    slope30d?: number;
-    heatToday?: number;
     aiSignal?: string;
     keywordId?: number;
+    keyword?: string;
+    slope30d?: number;
+    heatToday?: number;
+    slope7d?: number;
 }
 

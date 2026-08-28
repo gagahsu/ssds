@@ -1,0 +1,22 @@
+.product-form-page {
+  padding: 1rem;
+  max-width: 640px;
+}
+
+.form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.hint {
+  color: #666;
+  font-size: 0.9rem;
+}
